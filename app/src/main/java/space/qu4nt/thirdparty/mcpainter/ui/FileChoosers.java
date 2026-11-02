@@ -50,7 +50,7 @@ final class FileChoosers {
     }
 
     static Optional<Path> openShapeImage(Frame owner, Messages messages, Path directory) {
-        return open(owner, messages.text("chooser.openShapeImage"), directory, PNG);
+        return open(owner, messages.text("chooser.openShapeImage"), directory, null);
     }
 
     static Optional<Path> saveProject(Frame owner, Messages messages, Path directory, String suggestedName) {
@@ -145,9 +145,11 @@ final class FileChoosers {
     private static Optional<Path> open(Frame owner, String title, Path directory, String extension) {
         FileDialog dialog = new FileDialog(owner, title, FileDialog.LOAD);
         setDirectory(dialog, directory);
-        dialog.setFilenameFilter(extensionFilter(extension));
-        if (Platform.current() == Platform.WINDOWS) {
-            dialog.setFile("*." + extension);
+        if (extension != null) {
+            dialog.setFilenameFilter(extensionFilter(extension));
+            if (Platform.current() == Platform.WINDOWS) {
+                dialog.setFile("*." + extension);
+            }
         }
         dialog.setVisible(true);
         return result(dialog);

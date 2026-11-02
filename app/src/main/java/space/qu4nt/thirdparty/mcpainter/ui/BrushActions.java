@@ -65,16 +65,28 @@ final class BrushActions {
         }
         Path path = image.get();
         imageDirectory = path.getParent();
-        BackgroundTask.Outcome<BrushShape.Mask> mask = BackgroundTask.run(frame, messages, "task.readingShape",
-                () -> BrushMaskImporter.importPng(path));
-        if (!mask.ok()) {
-            Dialogs.error(frame, messages, "error.brushShape", mask.error());
+        BackgroundTask.Outcome<BrushMaskImporter.Source> source = BackgroundTask.run(frame, messages,
+                "task.readingShape", () -> BrushMaskImporter.read(path));
+        if (!source.ok()) {
+            Dialogs.error(frame, messages, "error.brushShape", source.error());
             return;
         }
-        Optional<NamedShape> named = askName("shape.nameTitle", baseName(path),
-                name -> new NamedShape(name, mask.value()));
-        if (named.isEmpty()) {
-            return;
+        ShapeImportForm form = new ShapeImportForm(messages, source.value(), baseName(path));
+        Optional<NamedShape> named = Optional.empty();
+        while (named.isEmpty()) {
+            if (!Dialogs.form(frame, messages, "shape.importTitle", form.panel())) {
+                return;
+            }
+            Optional<BrushShape.Mask> mask = form.mask();
+            if (mask.isEmpty()) {
+                Dialogs.error(frame, messages, messages.text("shape.empty"), "");
+                continue;
+            }
+            try {
+                named = Optional.of(new NamedShape(form.name(), mask.get()));
+            } catch (IllegalArgumentException e) {
+                Dialogs.error(frame, messages, messages.text("brush.nameInvalid"), "");
+            }
         }
         try {
             BrushLibrary.Stored<NamedShape> stored = library.saveShape(named.get());

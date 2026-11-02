@@ -101,7 +101,7 @@ class BrushLibraryTest {
             {"\"type\": \"mask\"", "\"type\": \"star\""},
             {"\"size\": 3", "\"size\": 4"},
             {"\"size\": 3", "\"size\": 0"},
-            {"\"size\": 3", "\"size\": 257"},
+            {"\"size\": 3", "\"size\": 513"},
         };
         for (String[] mutation : mutations) {
             assertTrue(good.contains(mutation[0]), mutation[0]);
@@ -175,6 +175,59 @@ class BrushLibraryTest {
         BrushStroke.begin(squareModel, square, Tool.TERRAIN, "t", 120, 120, noop()).finish();
         assertEquals(4, squareModel.tileCount());
         assertTrue(squareModel.contains(129, 129));
+    }
+
+    @Test
+    void largestMasksFitInOneSharedPresetFile() throws IOException {
+        int side = BrushShape.Mask.MAX_SIZE;
+        byte[] noise = new byte[side * side];
+        new java.util.Random(7).nextBytes(noise);
+        BrushShape.Mask big = new BrushShape.Mask(side, noise);
+        BrushLibrary library = new BrushLibrary(dir);
+        BrushLibrary.Stored<BrushPreset> stored = library.savePreset(preset(big));
+        long bytes = Files.size(dir.resolve("presets").resolve(stored.file()));
+        assertTrue(bytes < space.qu4nt.thirdparty.mcpainter.io.JsonFileStore.MAX_FILE_BYTES, Long.toString(bytes));
+        assertEquals(List.of(stored), library.load().presets());
+    }
+
+    @Test
+    void importFormPreviewsLevelsAndInvert() throws IOException {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(40, 20,
+                java.awt.image.BufferedImage.TYPE_USHORT_GRAY);
+        for (int z = 0; z < 20; z++) {
+            for (int x = 0; x < 40; x++) {
+                image.getRaster().setSample(x, z, 0, 30_000 + x * 100);
+            }
+        }
+        Path file = dir.resolve("mountain.tif");
+        assertTrue(javax.imageio.ImageIO.write(image, "tiff", file.toFile()));
+        space.qu4nt.thirdparty.mcpainter.io.BrushMaskImporter.Source source =
+                space.qu4nt.thirdparty.mcpainter.io.BrushMaskImporter.read(file);
+        ShapeImportForm form = new ShapeImportForm(Messages.load(Language.KOREAN), source,
+                BrushActions.baseName(file));
+        assertEquals("mountain", form.name());
+        BrushShape.Mask stretched = form.mask().orElseThrow();
+        assertEquals(40, stretched.size());
+        assertEquals(255, stretched.value(39, 20));
+        assertEquals(0, stretched.value(0, 20));
+        assertEquals(0, stretched.value(20, 2));
+        form.setOptions(false, false);
+        assertTrue(form.mask().orElseThrow().value(0, 20) > 100);
+
+        java.awt.image.BufferedImage white = new java.awt.image.BufferedImage(4, 4,
+                java.awt.image.BufferedImage.TYPE_INT_RGB);
+        for (int z = 0; z < 4; z++) {
+            for (int x = 0; x < 4; x++) {
+                white.setRGB(x, z, 0xFFFFFF);
+            }
+        }
+        Path whiteFile = dir.resolve("white.bmp");
+        assertTrue(javax.imageio.ImageIO.write(white, "bmp", whiteFile.toFile()));
+        ShapeImportForm empty = new ShapeImportForm(Messages.load(Language.KOREAN),
+                space.qu4nt.thirdparty.mcpainter.io.BrushMaskImporter.read(whiteFile), "white");
+        assertTrue(empty.mask().isPresent());
+        empty.setOptions(false, true);
+        assertTrue(empty.mask().isEmpty());
     }
 
     @Test

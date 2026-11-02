@@ -18,6 +18,8 @@ final class ShapeEntry {
     }
 
     static final int ICON_SIZE = 16;
+    private static final int BACKGROUND_LEVEL = 0x22;
+    private static final Color BACKGROUND = new Color(BACKGROUND_LEVEL, BACKGROUND_LEVEL, BACKGROUND_LEVEL);
 
     private final Kind kind;
     private final String file;
@@ -62,34 +64,34 @@ final class ShapeEntry {
 
     Icon icon() {
         if (icon == null) {
-            icon = new ImageIcon(thumbnail(shape));
+            icon = new ImageIcon(thumbnail(shape, ICON_SIZE));
         }
         return icon;
     }
 
-    static BufferedImage thumbnail(BrushShape shape) {
-        BufferedImage image = new BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_ARGB);
+    static BufferedImage thumbnail(BrushShape shape, int side) {
+        BufferedImage image = new BufferedImage(side, side, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = image.createGraphics();
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(BACKGROUND);
+            g.fillRect(0, 0, side, side);
             g.setColor(Color.WHITE);
-            g.fillRect(0, 0, ICON_SIZE, ICON_SIZE);
-            g.setColor(Color.DARK_GRAY);
             switch (shape) {
-                case BrushShape.Circle _ -> g.fillOval(1, 1, ICON_SIZE - 2, ICON_SIZE - 2);
-                case BrushShape.Square _ -> g.fillRect(2, 2, ICON_SIZE - 4, ICON_SIZE - 4);
+                case BrushShape.Circle _ -> g.fillOval(1, 1, side - 2, side - 2);
+                case BrushShape.Square _ -> g.fillRect(2, 2, side - 4, side - 4);
                 case BrushShape.Mask mask -> {
-                    for (int y = 0; y < ICON_SIZE; y++) {
-                        for (int x = 0; x < ICON_SIZE; x++) {
-                            int v = mask.value(x * mask.size() / ICON_SIZE, y * mask.size() / ICON_SIZE);
-                            int shade = 255 - v;
+                    for (int y = 0; y < side; y++) {
+                        for (int x = 0; x < side; x++) {
+                            int v = mask.value(x * mask.size() / side, y * mask.size() / side);
+                            int shade = BACKGROUND_LEVEL + v * (255 - BACKGROUND_LEVEL) / 255;
                             image.setRGB(x, y, 0xFF000000 | (shade << 16) | (shade << 8) | shade);
                         }
                     }
                 }
             }
             g.setColor(Color.GRAY);
-            g.drawRect(0, 0, ICON_SIZE - 1, ICON_SIZE - 1);
+            g.drawRect(0, 0, side - 1, side - 1);
         } finally {
             g.dispose();
         }
