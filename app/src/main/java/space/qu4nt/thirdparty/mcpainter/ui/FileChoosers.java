@@ -25,10 +25,13 @@ final class FileChoosers {
     }
 
     static Optional<Path> saveProject(Component parent, Messages messages, Path directory, String suggestedName) {
-        JFileChooser chooser = chooser(directory);
+        Path base = directory != null ? directory : Path.of(System.getProperty("user.home", "."));
+        JFileChooser chooser = chooser(base);
         chooser.setFileFilter(new FileNameExtensionFilter(messages.text("filter.project"), extension()));
-        if (directory != null) {
-            chooser.setSelectedFile(directory.resolve(suggestedName).toFile());
+        try {
+            chooser.setSelectedFile(base.resolve(suggestedName).toFile());
+        } catch (InvalidPathException ignored) {
+            chooser.setSelectedFile(null);
         }
         if (chooser.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return Optional.empty();
@@ -47,8 +50,10 @@ final class FileChoosers {
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.setAcceptAllFileFilterUsed(false);
         chooser.setDialogTitle(messages.text("chooser.world"));
-        return chooser.showDialog(parent, messages.text("dialog.select")) == JFileChooser.APPROVE_OPTION
-                ? selected(chooser) : Optional.empty();
+        if (chooser.showDialog(parent, messages.text("dialog.select")) != JFileChooser.APPROVE_OPTION) {
+            return Optional.empty();
+        }
+        return selected(chooser).or(() -> Optional.ofNullable(chooser.getCurrentDirectory()).map(File::toPath));
     }
 
     static Path withProjectExtension(Path file) {
