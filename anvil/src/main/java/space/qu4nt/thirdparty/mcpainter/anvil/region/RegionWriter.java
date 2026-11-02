@@ -17,6 +17,23 @@ public final class RegionWriter {
     public RegionWriter() {
     }
 
+    public static RegionWriter copyOf(RegionFile region) throws IOException {
+        RegionWriter writer = new RegionWriter();
+        for (int z = 0; z < RegionPos.CHUNKS_PER_SIDE; z++) {
+            for (int x = 0; x < RegionPos.CHUNKS_PER_SIDE; x++) {
+                if (region.state(x, z) == RegionFile.ChunkState.CORRUPT) {
+                    throw new RegionFormatException("refusing to rewrite " + region.path().getFileName()
+                            + " with corrupt chunk (" + x + ", " + z + "): " + region.problem(x, z).orElse(""));
+                }
+                Optional<RawChunk> raw = region.readRaw(x, z);
+                if (raw.isPresent()) {
+                    writer.put(x, z, raw.get());
+                }
+            }
+        }
+        return writer;
+    }
+
     public RegionWriter put(int localX, int localZ, RawChunk chunk) {
         chunks[RegionPos.index(localX, localZ)] = Objects.requireNonNull(chunk, "chunk");
         return this;

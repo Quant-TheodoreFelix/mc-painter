@@ -15,6 +15,8 @@ import org.gradle.jvm.toolchain.JavaLanguageVersion;
 public final class JavaConventionsPlugin implements Plugin<Project> {
 
     private static final int JAVA_VERSION = 26;
+    private static final String FIXTURES_VARIABLE = "MCPAINTER_FIXTURES";
+    private static final String FIXTURES_PROPERTY = "mcpainter.fixtures";
 
     @Override
     public void apply(Project project) {
@@ -36,6 +38,13 @@ public final class JavaConventionsPlugin implements Plugin<Project> {
         deps.add("testImplementation", libs.findLibrary("junit-jupiter").orElseThrow());
         deps.add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").orElseThrow());
 
-        project.getTasks().withType(Test.class).configureEach(Test::useJUnitPlatform);
+        String fixtures = project.getProviders().environmentVariable(FIXTURES_VARIABLE).getOrNull();
+        project.getTasks().withType(Test.class).configureEach(test -> {
+            test.useJUnitPlatform();
+            if (fixtures != null && !fixtures.isBlank()) {
+                test.systemProperty(FIXTURES_PROPERTY, fixtures);
+                test.getTestLogging().setShowStandardStreams(true);
+            }
+        });
     }
 }
