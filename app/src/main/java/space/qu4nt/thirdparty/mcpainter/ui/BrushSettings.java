@@ -22,6 +22,7 @@ final class BrushSettings {
     private TerrainType terrain = TerrainType.GRASS;
     private int waterLevel = 63;
     private String biome = WorldModel.DEFAULT_BIOME;
+    private boolean autoAddTiles;
     private final List<Runnable> listeners = new ArrayList<>();
 
     void addListener(Runnable listener) {
@@ -118,6 +119,17 @@ final class BrushSettings {
     static String normalizeBiome(String value) {
         Objects.requireNonNull(value, "biome");
         return ResourceLocation.parse(value.strip()).toString();
+    }
+
+    boolean autoAddTiles() {
+        return autoAddTiles;
+    }
+
+    void setAutoAddTiles(boolean value) {
+        if (value != autoAddTiles) {
+            autoAddTiles = value;
+            fire();
+        }
     }
 
     Brush brush() {

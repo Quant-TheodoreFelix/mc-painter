@@ -136,6 +136,48 @@ class BrushStrokeTest {
     }
 
     @Test
+    void autoAddCreatesTilesUnderAnyBrushWithinOneUndoStep() {
+        WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
+        BrushSettings off = settings(Tool.RAISE, 4);
+        BrushStroke.begin(model, off, Tool.RAISE, "r", 200, 20, listener).finish();
+        assertEquals(1, model.tileCount());
+
+        BrushSettings on = settings(Tool.RAISE, 4);
+        on.setAutoAddTiles(true);
+        on.setTerrain(TerrainType.SAND);
+        long before = model.revision();
+        BrushStroke stroke = BrushStroke.begin(model, on, Tool.RAISE, "r", 200, 20, listener);
+        stroke.dragTo(260, 20);
+        stroke.finish();
+        assertEquals(3, model.tileCount());
+        assertTrue(model.contains(260, 20));
+        assertTrue(model.height(200, 20) > 64);
+        assertEquals(64f, model.height(250, 100));
+        assertEquals(TerrainType.SAND, model.terrain(250, 100));
+        assertTrue(changes.getLast().contains(new TilePos(2, 0)));
+        model.undo();
+        assertEquals(1, model.tileCount());
+        assertEquals(before, model.revision());
+
+        BrushSettings flatten = settings(Tool.FLATTEN, 2);
+        flatten.setAutoAddTiles(true);
+        BrushStroke.begin(model, flatten, Tool.FLATTEN, "f", -10, 10, listener).finish();
+        assertEquals(64.5f, model.height(-10, 10), 1e-4);
+    }
+
+    @Test
+    void autoAddStopsAtTheTileLimit() {
+        WorldModel model = WorldModel.builder(-64, 320, 63).maxTiles(1).build();
+        BrushSettings paint = settings(Tool.TERRAIN, 3);
+        paint.setAutoAddTiles(true);
+        BrushStroke stroke = BrushStroke.begin(model, paint, Tool.TERRAIN, "t", 0, 0, listener);
+        stroke.dragTo(0, 40);
+        stroke.finish();
+        assertEquals(1, model.tileCount());
+        assertEquals(List.of(1), limits);
+    }
+
+    @Test
     void tilesAroundCoversTheMargin() {
         SequencedSet<TilePos> tiles = BrushStroke.tilesAround(0, 0, 16);
         assertEquals(List.of(new TilePos(-1, -1), new TilePos(0, -1), new TilePos(-1, 0), new TilePos(0, 0)),

@@ -12,6 +12,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -34,6 +35,7 @@ final class ToolPanel {
     private final JSlider strengthSlider;
     private final JLabel strengthValue = SafeText.label("");
     private final JComboBox<Brush.Falloff> falloff;
+    private final JCheckBox autoAddTiles;
     private boolean syncing;
 
     ToolPanel(BrushSettings settings, Messages messages) {
@@ -80,6 +82,14 @@ final class ToolPanel {
                 settings.setFalloff(value);
             }
         });
+        autoAddTiles = SafeText.plain(new JCheckBox(messages.text("brush.autoAddTiles")));
+        autoAddTiles.setToolTipText(messages.text("brush.autoAddTilesHint"));
+        autoAddTiles.setFocusable(false);
+        autoAddTiles.addActionListener(e -> {
+            if (!syncing) {
+                settings.setAutoAddTiles(autoAddTiles.isSelected());
+            }
+        });
 
         JPanel brush = new JPanel(new GridBagLayout());
         brush.setBorder(section(messages.text("panel.brush")));
@@ -88,6 +98,7 @@ final class ToolPanel {
         addRow(brush, 2, SafeText.label(messages.text("brush.strength")), strengthValue);
         addWide(brush, 3, strengthSlider);
         addRow(brush, 4, SafeText.label(messages.text("brush.falloff")), falloff);
+        addWide(brush, 5, autoAddTiles);
 
         JPanel stack = new JPanel();
         stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
@@ -123,6 +134,8 @@ final class ToolPanel {
             SafeText.setText(strengthValue,
                     messages.text("brush.strengthValue", Integer.toString(settings.strengthPercent())));
             falloff.setSelectedItem(settings.falloff());
+            autoAddTiles.setSelected(settings.autoAddTiles());
+            autoAddTiles.setEnabled(settings.tool() != Tool.ADD_TILES);
         } finally {
             syncing = false;
         }

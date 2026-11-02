@@ -31,15 +31,15 @@ final class BrushStroke {
     private final TerrainType terrain;
     private final int waterLevel;
     private final String biome;
-    private final float flattenTarget;
+    private final boolean autoAddTiles;
     private final Listener listener;
+    private float flattenTarget = Float.NaN;
     private int lastX;
     private int lastZ;
     private boolean limitReported;
     private boolean finished;
 
-    private BrushStroke(WorldModel model, Edit edit, Tool tool, BrushSettings settings, float flattenTarget,
-            Listener listener) {
+    private BrushStroke(WorldModel model, Edit edit, Tool tool, BrushSettings settings, Listener listener) {
         this.model = model;
         this.edit = edit;
         this.tool = tool;
@@ -48,7 +48,7 @@ final class BrushStroke {
         this.terrain = settings.terrain();
         this.waterLevel = settings.waterLevel();
         this.biome = settings.biome();
-        this.flattenTarget = flattenTarget;
+        this.autoAddTiles = settings.autoAddTiles();
         this.listener = listener;
     }
 
@@ -57,9 +57,8 @@ final class BrushStroke {
         Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(tool, "tool");
         Objects.requireNonNull(listener, "listener");
-        float target = model.contains(x, z) ? (float) Math.floor(model.height(x, z)) + 0.5f : model.seaLevel() + 0.5f;
         Edit edit = model.beginEdit(label);
-        BrushStroke stroke = new BrushStroke(model, edit, tool, settings, target, listener);
+        BrushStroke stroke = new BrushStroke(model, edit, tool, settings, listener);
         try {
             stroke.dab(x, z);
         } catch (RuntimeException e) {
@@ -117,6 +116,11 @@ final class BrushStroke {
     private void dab(int x, int z) {
         lastX = x;
         lastZ = z;
+        boolean added = (tool == Tool.ADD_TILES || autoAddTiles) && addTiles(x, z);
+        if (Float.isNaN(flattenTarget)) {
+            flattenTarget = model.contains(x, z) ? (float) Math.floor(model.height(x, z)) + 0.5f
+                    : model.seaLevel() + 0.5f;
+        }
         switch (tool) {
             case RAISE -> TerrainOps.raise(edit, x, z, brush, RAISE_PER_DAB * strength);
             case LOWER -> TerrainOps.raise(edit, x, z, brush, -RAISE_PER_DAB * strength);
@@ -125,17 +129,19 @@ final class BrushStroke {
             case TERRAIN -> TerrainOps.paintTerrain(edit, x, z, brush, terrain, PAINT_THRESHOLD);
             case WATER -> TerrainOps.setWaterLevel(edit, x, z, brush, waterLevel, PAINT_THRESHOLD);
             case BIOME -> TerrainOps.paintBiome(edit, x, z, brush, biome, PAINT_THRESHOLD);
-            case ADD_TILES -> addTiles(x, z);
+            case ADD_TILES -> {
+            }
         }
-        int margin = brush.radius() + (tool == Tool.ADD_TILES ? Tile.SIZE : TileRenderer.SHADE_MARGIN);
+        int margin = brush.radius() + (added ? Tile.SIZE : TileRenderer.SHADE_MARGIN);
         listener.changed(tilesAround(x, z, margin));
     }
 
-    private void addTiles(int x, int z) {
+    private boolean addTiles(int x, int z) {
         int r = brush.radius();
         TilePos min = TilePos.ofBlock(x - r, z - r);
         TilePos max = TilePos.ofBlock(x + r, z + r);
         double reach = (r + 0.5) * (r + 0.5);
+        boolean added = false;
         for (int tz = min.z(); tz <= max.z(); tz++) {
             for (int tx = min.x(); tx <= max.x(); tx++) {
                 TilePos pos = new TilePos(tx, tz);
@@ -151,11 +157,12 @@ final class BrushStroke {
                         limitReported = true;
                         listener.tileLimitReached(model.maxTiles());
                     }
-                    return;
+                    return added;
                 }
-                edit.addTile(pos, model.seaLevel() + 1, terrain);
+                added |= edit.addTile(pos, model.seaLevel() + 1, terrain);
             }
         }
+        return added;
     }
 
     static SequencedSet<TilePos> tilesAround(int x, int z, int margin) {
