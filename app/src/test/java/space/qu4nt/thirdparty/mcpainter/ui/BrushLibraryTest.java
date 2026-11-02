@@ -1,6 +1,7 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -81,6 +82,7 @@ class BrushLibraryTest {
             {"\"version\": 1", "\"version\": 2"},
             {"\"format\": \"mc-painter-preset\"", "\"format\": \"other\""},
             {"\"name\": \"산 만들기\"", "\"name\": \"\""},
+            {"\"name\": \"산 만들기\"", "\"name\": \"   \""},
             {"\"name\": \"산 만들기\"", "\"name\": \"" + "x".repeat(65) + "\""},
             {"\"name\": \"산 만들기\"", "\"name\": \"a\\u202eb\""},
             {"\"name\": \"산 만들기\"", "\"name\": \"<html>\""},
@@ -163,6 +165,7 @@ class BrushLibraryTest {
         circle.setAutoAddTiles(true);
         BrushStroke.begin(circleModel, circle, Tool.TERRAIN, "t", 120, 120, noop()).finish();
         assertEquals(3, circleModel.tileCount());
+        assertFalse(circleModel.contains(129, 129));
 
         WorldModel squareModel = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
         BrushSettings square = new BrushSettings();
