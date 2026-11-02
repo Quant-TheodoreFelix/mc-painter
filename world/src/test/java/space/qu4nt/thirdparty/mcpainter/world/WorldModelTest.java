@@ -104,6 +104,31 @@ class WorldModelTest {
     }
 
     @Test
+    void revisionIdentifiesEachHistoryState() {
+        WorldModel model = twoTiles();
+        long setup = model.revision();
+        try (Edit edit = model.beginEdit("first")) {
+            edit.setHeight(1, 1, 80);
+        }
+        long first = model.revision();
+        assertTrue(first != setup);
+        try (Edit edit = model.beginEdit("noop")) {
+            edit.setHeight(1, 1, 80);
+        }
+        assertEquals(first, model.revision());
+        model.undo();
+        assertEquals(setup, model.revision());
+        model.redo();
+        assertEquals(first, model.revision());
+        model.undo();
+        try (Edit edit = model.beginEdit("second")) {
+            edit.setHeight(2, 2, 90);
+        }
+        assertTrue(model.revision() != first && model.revision() != setup);
+        assertEquals(0, WorldModel.create(-64, 320, 62).revision());
+    }
+
+    @Test
     void onlyOneEditAtATime() {
         WorldModel model = twoTiles();
         Edit first = model.beginEdit("first");

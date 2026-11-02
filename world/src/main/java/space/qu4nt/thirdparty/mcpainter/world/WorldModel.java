@@ -125,6 +125,10 @@ public final class WorldModel {
         return history.undoLabel();
     }
 
+    public long revision() {
+        return history.revision();
+    }
+
     public boolean undo() {
         requireNoActiveEdit();
         return history.undo(tiles);

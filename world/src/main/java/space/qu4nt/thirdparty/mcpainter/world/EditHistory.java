@@ -11,7 +11,11 @@ final class EditHistory {
     static final int MAX_STEPS = 100;
     static final long MAX_BYTES = 512L * 1024 * 1024;
 
-    record Step(String label, Map<TilePos, Tile> before) {
+    record Step(String label, Map<TilePos, Tile> before, long fromRevision, long toRevision) {
+
+        Step(String label, Map<TilePos, Tile> before) {
+            this(label, before, 0, 0);
+        }
 
         long estimatedBytes() {
             return before.values().stream().filter(t -> t != null).count() * Tile.ESTIMATED_BYTES;
@@ -21,8 +25,16 @@ final class EditHistory {
     private final Deque<Step> undo = new ArrayDeque<>();
     private final Deque<Step> redo = new ArrayDeque<>();
     private long undoBytes;
+    private long revision;
+    private long lastRevision;
 
-    void push(Step step) {
+    long revision() {
+        return revision;
+    }
+
+    void push(Step unstamped) {
+        Step step = new Step(unstamped.label(), unstamped.before(), revision, ++lastRevision);
+        revision = step.toRevision();
         undo.push(step);
         undoBytes += step.estimatedBytes();
         redo.clear();
@@ -50,6 +62,7 @@ final class EditHistory {
         }
         undoBytes -= step.estimatedBytes();
         redo.push(swap(step, tiles));
+        revision = step.fromRevision();
         return true;
     }
 
@@ -61,6 +74,7 @@ final class EditHistory {
         Step inverse = swap(step, tiles);
         undo.push(inverse);
         undoBytes += inverse.estimatedBytes();
+        revision = step.toRevision();
         return true;
     }
 
@@ -74,6 +88,6 @@ final class EditHistory {
                 tiles.put(entry.getKey(), entry.getValue());
             }
         }
-        return new Step(step.label(), current);
+        return new Step(step.label(), current, step.fromRevision(), step.toRevision());
     }
 }
