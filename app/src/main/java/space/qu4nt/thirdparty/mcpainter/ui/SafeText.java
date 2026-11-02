@@ -1,6 +1,7 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.Font;
+import javax.swing.AbstractButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JTextArea;
@@ -56,7 +57,16 @@ final class SafeText {
         label.setText(neutralize(text));
     }
 
+    static void setText(AbstractButton button, String text) {
+        plain(button);
+        button.setText(neutralize(text));
+    }
+
     static JTextArea message(String text) {
+        return message(text, MESSAGE_COLUMNS);
+    }
+
+    static JTextArea message(String text, int columns) {
         JTextArea area = new JTextArea(neutralize(text));
         area.setEditable(false);
         area.setLineWrap(true);
@@ -67,7 +77,7 @@ final class SafeText {
         if (font != null) {
             area.setFont(font);
         }
-        area.setColumns(MESSAGE_COLUMNS);
+        area.setColumns(columns);
         area.setSize(area.getPreferredSize().width, Short.MAX_VALUE);
         area.setSize(area.getPreferredSize());
         return area;

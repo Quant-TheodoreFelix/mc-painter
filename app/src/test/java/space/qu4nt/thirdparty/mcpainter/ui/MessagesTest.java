@@ -62,6 +62,9 @@ class MessagesTest {
             for (Language other : Language.values()) {
                 assertTrue(messages.has(other.messageKey()));
             }
+            for (Tool tool : Tool.values()) {
+                assertTrue(messages.has(tool.messageKey()), tool.name());
+            }
             for (TerrainType type : TerrainType.values()) {
                 assertTrue(messages.has(Labels.terrainKey(type)), type.id());
             }

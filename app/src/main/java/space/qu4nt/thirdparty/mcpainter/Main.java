@@ -6,6 +6,7 @@ import java.util.Map;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
 import space.qu4nt.thirdparty.mcpainter.io.SmokeTest;
 import space.qu4nt.thirdparty.mcpainter.io.WorldExporter;
+import space.qu4nt.thirdparty.mcpainter.ui.App;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 public class Main {
@@ -16,6 +17,15 @@ public class Main {
               mc-painter export-heightmap <heightmap.png> <template-world-directory> [--low N] [--high N] [--sea N]""";
 
     static void main(String[] args) throws Exception {
+        if (args.length == 0) {
+            if (App.headless()) {
+                IO.println(App.headlessMessage());
+                IO.println(USAGE);
+                System.exit(2);
+            }
+            App.launch();
+            return;
+        }
         if (args.length == 2 && args[0].equals("smoke-test")) {
             for (String line : SmokeTest.run(Path.of(args[1]))) {
                 IO.println(line);

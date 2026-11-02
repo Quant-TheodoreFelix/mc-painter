@@ -1,0 +1,145 @@
+package space.qu4nt.thirdparty.mcpainter.ui;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.SequencedSet;
+import org.junit.jupiter.api.Test;
+import space.qu4nt.thirdparty.mcpainter.world.Brush;
+import space.qu4nt.thirdparty.mcpainter.world.Edit;
+import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
+import space.qu4nt.thirdparty.mcpainter.world.TilePos;
+import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
+
+class BrushStrokeTest {
+
+    private final List<SequencedSet<TilePos>> changes = new ArrayList<>();
+    private final List<Integer> limits = new ArrayList<>();
+    private final BrushStroke.Listener listener = new BrushStroke.Listener() {
+        @Override
+        public void changed(SequencedSet<TilePos> tiles) {
+            changes.add(tiles);
+        }
+
+        @Override
+        public void tileLimitReached(int limit) {
+            limits.add(limit);
+        }
+    };
+
+    private static BrushSettings settings(Tool tool, int radius) {
+        BrushSettings settings = new BrushSettings();
+        settings.setTool(tool);
+        settings.setRadius(radius);
+        settings.setFalloff(Brush.Falloff.CONSTANT);
+        settings.setStrengthPercent(100);
+        return settings;
+    }
+
+    @Test
+    void oneStrokeIsOneUndoStep() {
+        WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
+        BrushStroke stroke = BrushStroke.begin(model, settings(Tool.RAISE, 2), Tool.RAISE, "올리기", 64, 64, listener);
+        stroke.repeat();
+        stroke.dragTo(68, 64);
+        stroke.finish();
+        assertTrue(model.height(64, 64) >= 66);
+        assertEquals("올리기", model.undoLabel().orElseThrow());
+        assertTrue(model.undo());
+        assertEquals(64f, model.height(64, 64));
+        assertFalse(model.canUndo());
+        assertFalse(changes.isEmpty());
+        assertTrue(changes.getFirst().contains(new TilePos(0, 0)));
+    }
+
+    @Test
+    void dragsInterpolateWithoutGaps() {
+        WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
+        BrushSettings sand = settings(Tool.TERRAIN, 0);
+        sand.setTerrain(TerrainType.SAND);
+        BrushStroke stroke = BrushStroke.begin(model, sand, Tool.TERRAIN, "t", 20, 60, listener);
+        stroke.dragTo(40, 60);
+        stroke.repeat();
+        stroke.finish();
+        for (int x = 20; x <= 40; x++) {
+            assertEquals(TerrainType.SAND, model.terrain(x, 60), "x=" + x);
+            assertEquals(TerrainType.GRASS, model.terrain(x, 59));
+            assertEquals(TerrainType.GRASS, model.terrain(x, 61));
+        }
+        assertEquals(TerrainType.GRASS, model.terrain(41, 60));
+        BrushSettings stone = settings(Tool.TERRAIN, 0);
+        stone.setTerrain(TerrainType.STONE);
+        BrushStroke second = BrushStroke.begin(model, stone, Tool.TERRAIN, "t", 20, 80, listener);
+        second.dragTo(40, 90);
+        second.finish();
+        for (int x = 20; x <= 40; x++) {
+            int z = (int) Math.round(80 + (x - 20) * 0.5);
+            boolean painted = false;
+            for (int dz = -1; dz <= 1; dz++) {
+                painted |= model.terrain(x, z + dz) == TerrainType.STONE;
+            }
+            assertTrue(painted, "gap at x=" + x);
+        }
+        assertThrows(IllegalStateException.class, () -> second.dragTo(0, 0));
+    }
+
+    @Test
+    void flattenUsesTheStartingColumnAndInverseLowers() {
+        WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
+        try (Edit edit = model.beginEdit("hill")) {
+            edit.setHeight(10, 10, 80.7f);
+        }
+        BrushStroke flatten = BrushStroke.begin(model, settings(Tool.FLATTEN, 3), Tool.FLATTEN, "f", 10, 10,
+                listener);
+        flatten.finish();
+        assertEquals(80.5f, model.height(8, 10), 1e-4);
+        assertEquals(Tool.LOWER, Tool.RAISE.inverse().orElseThrow());
+        assertTrue(Tool.TERRAIN.inverse().isEmpty());
+        BrushStroke lower = BrushStroke.begin(model, settings(Tool.RAISE, 0), Tool.LOWER, "l", 30, 30, listener);
+        lower.finish();
+        assertEquals(64f - BrushStroke.RAISE_PER_DAB, model.height(30, 30), 1e-4);
+    }
+
+    @Test
+    void paintsWaterAndBiome() {
+        WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
+        BrushSettings water = settings(Tool.WATER, 1);
+        water.setWaterLevel(70);
+        BrushStroke.begin(model, water, Tool.WATER, "w", 5, 5, listener).finish();
+        assertEquals(70, model.waterLevel(5, 5));
+        assertEquals(63, model.waterLevel(5, 8));
+        BrushSettings biome = settings(Tool.BIOME, 1);
+        biome.setBiome("desert");
+        BrushStroke.begin(model, biome, Tool.BIOME, "b", 5, 5, listener).finish();
+        assertEquals("minecraft:desert", model.biome(5, 5));
+    }
+
+    @Test
+    void addsTilesUntilTheLimit() {
+        WorldModel model = WorldModel.builder(-64, 320, 63).maxTiles(3).build();
+        BrushSettings add = settings(Tool.ADD_TILES, 10);
+        BrushStroke stroke = BrushStroke.begin(model, add, Tool.ADD_TILES, "a", 0, 0, listener);
+        assertEquals(3, model.tileCount());
+        stroke.dragTo(300, 300);
+        stroke.finish();
+        assertEquals(3, model.tileCount());
+        assertEquals(List.of(3), limits);
+        assertEquals(64f, model.height(-5, -5));
+        assertFalse(model.contains(5, 5));
+        assertTrue(model.undo());
+        assertEquals(0, model.tileCount());
+        assertTrue(model.beginEdit("next") != null);
+    }
+
+    @Test
+    void tilesAroundCoversTheMargin() {
+        SequencedSet<TilePos> tiles = BrushStroke.tilesAround(0, 0, 16);
+        assertEquals(List.of(new TilePos(-1, -1), new TilePos(0, -1), new TilePos(-1, 0), new TilePos(0, 0)),
+                List.copyOf(tiles));
+        assertEquals(1, BrushStroke.tilesAround(64, 64, 16).size());
+    }
+}
