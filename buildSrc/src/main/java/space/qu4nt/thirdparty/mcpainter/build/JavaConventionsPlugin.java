@@ -25,8 +25,10 @@ public final class JavaConventionsPlugin implements Plugin<Project> {
         JavaPluginExtension java = project.getExtensions().getByType(JavaPluginExtension.class);
         java.getToolchain().getLanguageVersion().set(JavaLanguageVersion.of(JAVA_VERSION));
 
+        String moduleVersion = project.getVersion().toString();
         project.getTasks().withType(JavaCompile.class).configureEach(task -> {
             task.getOptions().setEncoding("UTF-8");
+            task.getOptions().getJavaModuleVersion().set(moduleVersion);
             task.getOptions().getCompilerArgs().addAll(List.of("-Xlint:all", "-Werror"));
         });
 
