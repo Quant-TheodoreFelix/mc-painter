@@ -1,6 +1,7 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
@@ -109,7 +110,12 @@ final class ToolPanel {
     private void sync() {
         syncing = true;
         try {
-            buttons.get(settings.tool()).setSelected(true);
+            for (Map.Entry<Tool, JToggleButton> entry : buttons.entrySet()) {
+                JToggleButton button = entry.getValue();
+                boolean selected = entry.getKey() == settings.tool();
+                button.setSelected(selected);
+                button.setFont(button.getFont().deriveFont(selected ? Font.BOLD : Font.PLAIN));
+            }
             radiusSlider.setValue(settings.radius());
             radiusSpinner.setValue(settings.radius());
             strengthSlider.setValue(settings.strengthPercent());

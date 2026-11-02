@@ -29,6 +29,7 @@ final class MainWindow {
     private final JFrame frame = new JFrame();
     private final StatusBar status;
     private final MapView map;
+    private final ProjectActions project;
     private final JMenuItem undoItem;
     private final JMenuItem redoItem;
     private final boolean nativeQuit;
@@ -65,6 +66,7 @@ final class MainWindow {
                 status.notice(text);
             }
         });
+        this.project = new ProjectActions(frame, messages, document, map);
         this.undoItem = item("menu.edit.undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), this::undo);
         this.redoItem = item("menu.edit.redo",
                 KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | InputEvent.SHIFT_DOWN_MASK), this::redo);
@@ -115,12 +117,20 @@ final class MainWindow {
     private JMenuBar menuBar() {
         JMenuBar bar = new JMenuBar();
         JMenu file = menu("menu.file");
+        file.add(item("menu.file.new", KeyStroke.getKeyStroke(KeyEvent.VK_N, menuMask), project::newWorld));
+        file.add(item("menu.file.open", KeyStroke.getKeyStroke(KeyEvent.VK_O, menuMask), project::open));
+        file.add(item("menu.file.save", KeyStroke.getKeyStroke(KeyEvent.VK_S, menuMask), project::save));
+        file.add(item("menu.file.saveAs",
+                KeyStroke.getKeyStroke(KeyEvent.VK_S, menuMask | InputEvent.SHIFT_DOWN_MASK), project::saveAs));
+        file.addSeparator();
+        file.add(item("menu.file.importHeightmap", KeyStroke.getKeyStroke(KeyEvent.VK_I, menuMask),
+                project::importHeightmap));
+        file.add(item("menu.file.export", KeyStroke.getKeyStroke(KeyEvent.VK_E, menuMask), project::export));
         if (!nativeQuit) {
+            file.addSeparator();
             file.add(item("menu.file.exit", null, this::requestClose));
         }
-        if (file.getItemCount() > 0) {
-            bar.add(file);
-        }
+        bar.add(file);
 
         JMenu edit = menu("menu.edit");
         edit.add(undoItem);
@@ -182,7 +192,7 @@ final class MainWindow {
         Desktop desktop = Desktop.getDesktop();
         if (nativeQuit) {
             desktop.setQuitHandler((event, response) -> {
-                if (confirmDiscard()) {
+                if (project.confirmDiscard()) {
                     frame.dispose();
                     response.performQuit();
                 } else {
@@ -196,6 +206,9 @@ final class MainWindow {
     }
 
     private void undo() {
+        if (!ProjectActions.idle()) {
+            return;
+        }
         map.finishStroke();
         if (document.model().undo()) {
             map.invalidateAll();
@@ -204,6 +217,9 @@ final class MainWindow {
     }
 
     private void redo() {
+        if (!ProjectActions.idle()) {
+            return;
+        }
         map.finishStroke();
         if (document.model().redo()) {
             map.invalidateAll();
@@ -227,20 +243,8 @@ final class MainWindow {
         Dialogs.info(frame, messages, "about.title", messages.text("about.text", version));
     }
 
-    boolean confirmDiscard() {
-        map.finishStroke();
-        if (!document.dirty()) {
-            return true;
-        }
-        return switch (Dialogs.unsaved(frame, messages, document.displayName(messages))) {
-            case SAVE -> false;
-            case DISCARD -> true;
-            case CANCEL -> false;
-        };
-    }
-
     private void requestClose() {
-        if (confirmDiscard()) {
+        if (project.confirmDiscard()) {
             frame.dispose();
         }
     }
