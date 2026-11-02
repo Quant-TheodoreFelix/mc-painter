@@ -2,7 +2,7 @@ package space.qu4nt.thirdparty.mcpainter.anvil.world;
 
 public final class DataVersions {
 
-    public static final int V1_18 = 2861;
+    public static final int V1_18 = 2860;
     public static final int V26_1_SNAPSHOT_6 = 4774;
     public static final int V26_3_SNAPSHOT_7 = 5009;
     public static final int V26_3 = 5023;

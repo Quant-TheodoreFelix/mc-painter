@@ -2,10 +2,10 @@ package space.qu4nt.thirdparty.mcpainter.anvil.chunk;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.SequencedMap;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.DataVersions;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
 import space.qu4nt.thirdparty.mcpainter.nbt.CompoundTag;
@@ -83,7 +83,7 @@ final class PaletteCodec {
     }
 
     private static <T> CompoundTag write(Paletted<T> compact, ListTag palette, int minBits) {
-        CompoundTag.Builder builder = CompoundTag.builder().put(PALETTE, palette);
+        CompoundTag.Builder builder = CompoundTag.builder();
         int bits = PackedIndices.bitsFor(compact.palette().size(), minBits);
         if (bits > 0) {
             int[] indices = new int[compact.size()];
@@ -92,7 +92,7 @@ final class PaletteCodec {
             }
             builder.put(DATA, LongArrayTag.of(PackedIndices.pack(indices, bits)));
         }
-        return builder.build();
+        return builder.put(PALETTE, palette).build();
     }
 
     private static List<BlockStateEntry> parseLegacyPalette(ListTag palette) throws ChunkFormatException {
@@ -101,7 +101,7 @@ final class PaletteCodec {
         for (Tag element : palette) {
             CompoundTag compound = (CompoundTag) element;
             ResourceLocation id = parseId(requireString(compound, "Name"));
-            SortedMap<String, String> properties = parseProperties(compound.get("Properties"));
+            SequencedMap<String, String> properties = parseProperties(compound.get("Properties"));
             entries.add(BlockStateEntry.of(id, properties));
         }
         return entries;
@@ -146,13 +146,13 @@ final class PaletteCodec {
     private static ListTag encodeLegacyPalette(List<BlockStateEntry> palette) {
         List<Tag> entries = new ArrayList<>(palette.size());
         for (BlockStateEntry entry : palette) {
-            SortedMap<String, String> properties = entry.properties().orElseThrow(() -> new IllegalStateException(
+            SequencedMap<String, String> properties = entry.properties().orElseThrow(() -> new IllegalStateException(
                     "block " + entry.id() + " has elided default properties; legacy palettes need a block registry"));
-            CompoundTag.Builder builder = CompoundTag.builder().put("Name", new StringTag(entry.id().toString()));
+            CompoundTag.Builder builder = CompoundTag.builder();
             if (!properties.isEmpty()) {
                 builder.put("Properties", encodeProperties(properties));
             }
-            entries.add(builder.build());
+            entries.add(builder.put("Name", new StringTag(entry.id().toString())).build());
         }
         return ListTag.of(TagType.COMPOUND, entries);
     }
@@ -167,11 +167,14 @@ final class PaletteCodec {
             return ListTag.of(TagType.STRING, entries);
         }
         for (BlockStateEntry entry : palette) {
-            CompoundTag.Builder builder = CompoundTag.builder().put("id", new StringTag(entry.id().toString()));
-            if (!isElidable(entry)) {
-                builder.put("properties", encodeProperties(entry.properties().orElseThrow()));
+            if (isElidable(entry)) {
+                entries.add(CompoundTag.builder().put("", new StringTag(entry.id().toString())).build());
+            } else {
+                entries.add(CompoundTag.builder()
+                        .put("id", new StringTag(entry.id().toString()))
+                        .put("properties", encodeProperties(entry.properties().orElseThrow()))
+                        .build());
             }
-            entries.add(builder.build());
         }
         return ListTag.of(TagType.COMPOUND, entries);
     }
@@ -180,7 +183,7 @@ final class PaletteCodec {
         return entry.properties().map(Map::isEmpty).orElse(true);
     }
 
-    private static CompoundTag encodeProperties(SortedMap<String, String> properties) {
+    private static CompoundTag encodeProperties(SequencedMap<String, String> properties) {
         CompoundTag.Builder builder = CompoundTag.builder();
         for (Map.Entry<String, String> property : properties.entrySet()) {
             builder.put(property.getKey(), new StringTag(property.getValue()));
@@ -188,8 +191,8 @@ final class PaletteCodec {
         return builder.build();
     }
 
-    private static SortedMap<String, String> parseProperties(Optional<Tag> tag) throws ChunkFormatException {
-        SortedMap<String, String> properties = new TreeMap<>();
+    private static SequencedMap<String, String> parseProperties(Optional<Tag> tag) throws ChunkFormatException {
+        SequencedMap<String, String> properties = new LinkedHashMap<>();
         if (tag.isEmpty()) {
             return properties;
         }

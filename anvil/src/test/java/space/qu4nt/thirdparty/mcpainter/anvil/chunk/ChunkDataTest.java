@@ -1,13 +1,15 @@
 package space.qu4nt.thirdparty.mcpainter.anvil.chunk;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.Random;
-import java.util.TreeMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.DataVersions;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
@@ -18,6 +20,7 @@ import space.qu4nt.thirdparty.mcpainter.nbt.CompoundTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.ListTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.LongArrayTag;
+import space.qu4nt.thirdparty.mcpainter.nbt.NbtWriter;
 import space.qu4nt.thirdparty.mcpainter.nbt.RootTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.StringTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
@@ -28,7 +31,7 @@ class ChunkDataTest {
     private static final int ID_KEYS = DataVersions.PALETTE_ID_KEYS;
 
     private static CompoundTag legacyEntry(String name, String... properties) {
-        CompoundTag.Builder builder = CompoundTag.builder().put("Name", new StringTag(name));
+        CompoundTag.Builder builder = CompoundTag.builder();
         if (properties.length > 0) {
             CompoundTag.Builder props = CompoundTag.builder();
             for (int i = 0; i < properties.length; i += 2) {
@@ -36,15 +39,15 @@ class ChunkDataTest {
             }
             builder.put("Properties", props.build());
         }
-        return builder.build();
+        return builder.put("Name", new StringTag(name)).build();
     }
 
     private static CompoundTag container(ListTag palette, long[] data) {
-        CompoundTag.Builder builder = CompoundTag.builder().put("palette", palette);
+        CompoundTag.Builder builder = CompoundTag.builder();
         if (data != null) {
             builder.put("data", LongArrayTag.of(data));
         }
-        return builder.build();
+        return builder.put("palette", palette).build();
     }
 
     private static RootTag chunk(int dataVersion, CompoundTag... sections) {
@@ -209,15 +212,14 @@ class ChunkDataTest {
         ListTag stringForm = PaletteCodec.writeBlocks(defaults, ID_KEYS).get("palette", ListTag.class).orElseThrow();
         assertEquals(TagType.STRING, stringForm.elementType());
 
-        TreeMap<String, String> axis = new TreeMap<>();
-        axis.put("axis", "x");
+        Map<String, String> axis = Map.of("axis", "x");
         Paletted<BlockStateEntry> mixed = Paletted.of(List.of(
                 BlockStateEntry.defaultState(ResourceLocation.minecraft("stone")),
                 BlockStateEntry.of(ResourceLocation.minecraft("oak_log"), axis)), alternating());
         ListTag compoundForm = PaletteCodec.writeBlocks(mixed, ID_KEYS).get("palette", ListTag.class).orElseThrow();
         assertEquals(TagType.COMPOUND, compoundForm.elementType());
         CompoundTag stone = compoundForm.get(0, CompoundTag.class);
-        assertEquals(List.of("id"), List.copyOf(stone.keys()));
+        assertEquals(List.of(""), List.copyOf(stone.keys()));
         CompoundTag log = compoundForm.get(1, CompoundTag.class);
         assertEquals(List.of("id", "properties"), List.copyOf(log.keys()));
     }
@@ -228,6 +230,24 @@ class ChunkDataTest {
             indices[i] = i % 2;
         }
         return indices;
+    }
+
+    @Test
+    void propertyOrderIsPreserved() throws Exception {
+        CompoundTag section = CompoundTag.builder()
+                .put("Y", new ByteTag((byte) 0))
+                .put("block_states", container(ListTag.of(TagType.COMPOUND,
+                        legacyEntry("minecraft:leaf_litter", "segment_amount", "2", "facing", "south")), null))
+                .build();
+        RootTag root = chunk(LEGACY, section);
+        ChunkData data = ChunkData.parse(root);
+        assertEquals(List.of("segment_amount", "facing"), List.copyOf(
+                data.sections().getFirst().blocks().orElseThrow().get(0).properties().orElseThrow().keySet()));
+        ByteArrayOutputStream expected = new ByteArrayOutputStream();
+        ByteArrayOutputStream actual = new ByteArrayOutputStream();
+        NbtWriter.write(expected, root);
+        NbtWriter.write(actual, data.toNbt());
+        assertArrayEquals(expected.toByteArray(), actual.toByteArray());
     }
 
     @Test

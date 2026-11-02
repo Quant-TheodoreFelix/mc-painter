@@ -1,33 +1,27 @@
 package space.qu4nt.thirdparty.mcpainter.anvil.chunk;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.SequencedMap;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
 
-public record BlockStateEntry(ResourceLocation id, Optional<SortedMap<String, String>> properties) {
+public record BlockStateEntry(ResourceLocation id, Optional<SequencedMap<String, String>> properties) {
 
     public BlockStateEntry {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(properties, "properties");
-        properties = properties.map(map -> {
-            for (var entry : map.entrySet()) {
-                if (entry.getKey().isEmpty() || entry.getValue().isEmpty()) {
-                    throw new IllegalArgumentException("block property names and values must not be empty");
-                }
-            }
-            return Collections.unmodifiableSortedMap(new TreeMap<>(map));
-        });
+        properties = properties.map(BlockStateEntry::copyProperties);
     }
 
-    public static BlockStateEntry of(ResourceLocation id, SortedMap<String, String> properties) {
-        return new BlockStateEntry(id, Optional.of(properties));
+    public static BlockStateEntry of(ResourceLocation id, Map<String, String> properties) {
+        return new BlockStateEntry(id, Optional.of(copyProperties(properties)));
     }
 
     public static BlockStateEntry withoutProperties(ResourceLocation id) {
-        return new BlockStateEntry(id, Optional.of(new TreeMap<>()));
+        return new BlockStateEntry(id, Optional.of(Collections.unmodifiableSequencedMap(new LinkedHashMap<>())));
     }
 
     public static BlockStateEntry defaultState(ResourceLocation id) {
@@ -40,5 +34,18 @@ public record BlockStateEntry(ResourceLocation id, Optional<SortedMap<String, St
 
     public boolean hasKnownProperties() {
         return properties.isPresent();
+    }
+
+    private static SequencedMap<String, String> copyProperties(Map<String, String> source) {
+        LinkedHashMap<String, String> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : source.entrySet()) {
+            String key = Objects.requireNonNull(entry.getKey(), "property name");
+            String value = Objects.requireNonNull(entry.getValue(), "property value");
+            if (key.isEmpty() || value.isEmpty()) {
+                throw new IllegalArgumentException("block property names and values must not be empty");
+            }
+            copy.put(key, value);
+        }
+        return Collections.unmodifiableSequencedMap(copy);
     }
 }
