@@ -61,7 +61,7 @@ class ChunkRebuilderTest {
     @Test
     void rebuildsBlocksResetsStateAndComputesHeightmaps() throws Exception {
         RootTag rebuilt = ChunkRebuilder.rebuild(base(3953), 2, -1,
-                (x, y, z) -> SmokeTest.blockAt(x, y, z, -64), block -> block.equals(SmokeTest.AIR));
+                (x, y, z) -> SmokeTest.blockAt(x, y, z, -64), SmokeTest::traits);
         ChunkData data = ChunkData.parse(rebuilt);
         CompoundTag root = rebuilt.tag();
 

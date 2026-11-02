@@ -98,7 +98,11 @@ public final class WorldModel {
     }
 
     public String biome(int x, int z) {
-        return biomes.get(requireTile(x, z).biomeIndex(localIndex(x, z)));
+        return biomes.get(biomeIndex(x, z));
+    }
+
+    public int biomeIndex(int x, int z) {
+        return requireTile(x, z).biomeIndex(localIndex(x, z));
     }
 
     public Edit beginEdit(String label) {

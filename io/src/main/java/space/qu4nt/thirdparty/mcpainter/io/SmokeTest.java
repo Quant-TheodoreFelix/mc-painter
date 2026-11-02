@@ -44,6 +44,10 @@ public final class SmokeTest {
     private SmokeTest() {
     }
 
+    static BlockTraits traits(BlockStateEntry block) {
+        return block.equals(AIR) ? BlockTraits.AIR : BlockTraits.SOLID;
+    }
+
     private static BlockStateEntry plain(String path) {
         return BlockStateEntry.withoutProperties(ResourceLocation.minecraft(path));
     }
@@ -106,7 +110,7 @@ public final class SmokeTest {
             }
         }
 
-        ChunkData prototype = findPrototype(world, dimension)
+        ChunkData prototype = Prototypes.find(world, dimension)
                 .orElseThrow(() -> new IOException("no full chunk at the world's data version to use as a prototype"));
         int timestamp = (int) (System.currentTimeMillis() / 1000);
         int overwritten = 0;
@@ -124,12 +128,11 @@ public final class SmokeTest {
                     int localX = chunk[0] - pos.x() * RegionPos.CHUNKS_PER_SIDE;
                     int localZ = chunk[1] - pos.z() * RegionPos.CHUNKS_PER_SIDE;
                     Optional<ChunkData> own = existing == null ? Optional.empty()
-                            : fullChunk(existing, localX, localZ, world.level().dataVersion());
+                            : Prototypes.fullChunk(existing, localX, localZ, world.level().dataVersion());
                     ChunkData base = own.orElse(prototype);
-                    int minY = base.sections().stream().filter(s -> s.blocks().isPresent())
-                            .mapToInt(s -> s.y() * 16).min().orElseThrow();
+                    int minY = Prototypes.minY(base);
                     RootTag rebuilt = ChunkRebuilder.rebuild(base, chunk[0], chunk[1],
-                            (x, y, z) -> blockAt(x, y, z, minY), block -> block.equals(AIR));
+                            (x, y, z) -> blockAt(x, y, z, minY), SmokeTest::traits);
                     writer.put(localX, localZ, RawChunk.encode(rebuilt, ChunkCompression.ZLIB, timestamp));
                     if (own.isPresent()) {
                         overwritten++;
@@ -153,35 +156,6 @@ public final class SmokeTest {
         report.add("look at: /tp @s " + (CREATE_MIN_CHUNK_X * 16 + 16) + " " + (GROUND_Y + 2) + " "
                 + (CREATE_MIN_CHUNK_Z * 16 + 22) + "  (new chunks with diamond pillar)");
         return report;
-    }
-
-    private static Optional<ChunkData> findPrototype(MinecraftWorld world, Dimension dimension) throws IOException {
-        for (RegionPos pos : world.listRegions(dimension)) {
-            try (RegionFile region = RegionFile.open(world.regionPath(dimension, pos))) {
-                for (int z = 0; z < RegionPos.CHUNKS_PER_SIDE; z++) {
-                    for (int x = 0; x < RegionPos.CHUNKS_PER_SIDE; x++) {
-                        Optional<ChunkData> chunk = fullChunk(region, x, z, world.level().dataVersion());
-                        if (chunk.isPresent()) {
-                            return chunk;
-                        }
-                    }
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-    private static Optional<ChunkData> fullChunk(RegionFile region, int x, int z, int dataVersion) throws IOException {
-        if (region.state(x, z) != RegionFile.ChunkState.PRESENT) {
-            return Optional.empty();
-        }
-        Optional<RootTag> root = region.readChunk(x, z);
-        if (root.isEmpty()) {
-            return Optional.empty();
-        }
-        ChunkData data = ChunkData.parse(root.get());
-        boolean full = data.status().equals("full") || data.status().equals("minecraft:full");
-        return full && data.dataVersion() == dataVersion ? Optional.of(data) : Optional.empty();
     }
 
     private static void removeEntityChunks(MinecraftWorld world, Dimension dimension, RegionPos pos,
