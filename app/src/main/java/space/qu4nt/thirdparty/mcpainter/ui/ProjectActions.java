@@ -95,10 +95,11 @@ final class ProjectActions {
         if (chosen.isEmpty()) {
             return false;
         }
-        Path path = chosen.get();
+        Path path = FileChoosers.withProjectExtension(chosen.get());
         boolean replacing = document.file().map(path::equals).orElse(false);
-        if (!replacing && Files.exists(path, LinkOption.NOFOLLOW_LINKS) && !Dialogs.confirm(frame, messages,
-                "dialog.confirmTitle", messages.text("overwrite.message", path.toString()), "dialog.overwrite")) {
+        if (FileChoosers.needsOverwriteConfirmation(chosen.get(), path, Files.exists(path, LinkOption.NOFOLLOW_LINKS),
+                replacing) && !Dialogs.confirm(frame, messages, "dialog.confirmTitle",
+                        messages.text("overwrite.message", path.toString()), "dialog.overwrite")) {
             return false;
         }
         return saveTo(path);

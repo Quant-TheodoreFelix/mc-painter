@@ -27,6 +27,40 @@ class ProjectActionsTest {
     }
 
     @Test
+    void nativeDialogResultsResolveToPaths() {
+        assertEquals(FileChoosers.Platform.MAC, FileChoosers.Platform.of("Mac OS X"));
+        assertEquals(FileChoosers.Platform.WINDOWS, FileChoosers.Platform.of("Windows 11"));
+        assertEquals(FileChoosers.Platform.OTHER, FileChoosers.Platform.of("Linux"));
+        assertEquals(FileChoosers.Platform.OTHER, FileChoosers.Platform.of(null));
+
+        assertEquals(Path.of("/saves", "void"), FileChoosers.resolve("/saves", "void").orElseThrow());
+        assertTrue(FileChoosers.resolve("/saves", null).isEmpty());
+        assertTrue(FileChoosers.resolve("/saves", "").isEmpty());
+        assertTrue(FileChoosers.resolve("/saves", "bad\0name").isEmpty());
+
+        assertEquals(Path.of("/saves", "void"), FileChoosers.worldDirectory(Path.of("/saves", "void", "level.dat")));
+        assertEquals(Path.of("/saves", "void"), FileChoosers.worldDirectory(Path.of("/saves", "void")));
+        assertEquals(Path.of("/saves", "void", "level.dat_old"),
+                FileChoosers.worldDirectory(Path.of("/saves", "void", "level.dat_old")));
+
+        assertTrue(FileChoosers.extensionFilter("mcpaint").accept(null, "World.MCPAINT"));
+        assertFalse(FileChoosers.extensionFilter("mcpaint").accept(null, "world.mcpaint.png"));
+        assertTrue(FileChoosers.extensionFilter("png").accept(null, "height.png"));
+    }
+
+    @Test
+    void confirmsOverwriteOnlyWhenTheNativeDialogCouldNotAsk() {
+        Path raw = Path.of("dir", "world");
+        Path target = FileChoosers.withProjectExtension(raw);
+        assertTrue(FileChoosers.needsOverwriteConfirmation(raw, target, true, false));
+        assertFalse(FileChoosers.needsOverwriteConfirmation(raw, target, false, false));
+        assertFalse(FileChoosers.needsOverwriteConfirmation(raw, target, true, true));
+        Path typed = Path.of("dir", "world.mcpaint");
+        assertFalse(FileChoosers.needsOverwriteConfirmation(typed, FileChoosers.withProjectExtension(typed), true,
+                false));
+    }
+
+    @Test
     void findsMinecraftSavesPerPlatform() {
         assertEquals(Path.of("/Users/u/Library/Application Support/minecraft/saves"),
                 FileChoosers.minecraftSaves("Mac OS X", "/Users/u", null));
