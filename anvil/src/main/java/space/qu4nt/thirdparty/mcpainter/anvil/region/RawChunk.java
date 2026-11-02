@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
+import space.qu4nt.thirdparty.mcpainter.anvil.internal.Lz4BlockInputStream;
+import space.qu4nt.thirdparty.mcpainter.anvil.internal.Lz4FormatException;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtCompression;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtIo;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtLimits;
@@ -51,6 +53,13 @@ public final class RawChunk {
         Objects.requireNonNull(limits, "limits");
         ChunkCompression compression = compression()
                 .orElseThrow(() -> new UnsupportedCompressionException(compressionId));
+        if (compression == ChunkCompression.LZ4) {
+            try {
+                return NbtIo.read(new Lz4BlockInputStream(payload, 0, payload.length), NbtCompression.NONE, limits);
+            } catch (Lz4FormatException e) {
+                throw new RegionFormatException("corrupt LZ4 chunk payload", e);
+            }
+        }
         NbtCompression codec = switch (compression) {
             case GZIP -> NbtCompression.GZIP;
             case ZLIB -> NbtCompression.ZLIB;

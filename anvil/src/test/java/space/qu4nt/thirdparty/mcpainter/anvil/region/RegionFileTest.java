@@ -76,7 +76,7 @@ class RegionFileTest {
                 }
             }
             assertThrows(UnsupportedCompressionException.class, () -> region.readChunk(9, 9));
-            assertThrows(UnsupportedCompressionException.class, () -> region.readChunk(10, 9));
+            assertThrows(RegionFormatException.class, () -> region.readChunk(10, 9));
         }
         copy.writeTo(second);
         assertArrayEquals(Files.readAllBytes(first), Files.readAllBytes(second));
