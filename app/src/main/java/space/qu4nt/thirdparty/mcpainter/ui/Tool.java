@@ -24,6 +24,19 @@ enum Tool {
         return "tool." + key;
     }
 
+    String id() {
+        return key;
+    }
+
+    static Optional<Tool> fromId(String id) {
+        for (Tool tool : values()) {
+            if (tool.key.equals(id)) {
+                return Optional.of(tool);
+            }
+        }
+        return Optional.empty();
+    }
+
     boolean continuous() {
         return shapesHeight;
     }

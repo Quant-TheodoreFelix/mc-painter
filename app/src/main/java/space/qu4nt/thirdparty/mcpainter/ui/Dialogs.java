@@ -1,8 +1,14 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
+import java.util.Optional;
 import javax.swing.JComponent;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.event.AncestorEvent;
+import javax.swing.event.AncestorListener;
 
 final class Dialogs {
 
@@ -41,6 +47,34 @@ final class Dialogs {
         int result = JOptionPane.showOptionDialog(parent, form, messages.text(titleKey),
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
         return result == 0;
+    }
+
+    static Optional<String> prompt(Component parent, Messages messages, String titleKey, String labelKey,
+            String initial) {
+        JTextField field = SafeText.plain(new JTextField(initial == null ? "" : initial, 24));
+        JPanel panel = new JPanel(new BorderLayout(0, 6));
+        panel.add(SafeText.label(messages.text(labelKey)), BorderLayout.NORTH);
+        panel.add(field, BorderLayout.CENTER);
+        field.addAncestorListener(new AncestorListener() {
+            @Override
+            public void ancestorAdded(AncestorEvent event) {
+                field.requestFocusInWindow();
+                field.selectAll();
+            }
+
+            @Override
+            public void ancestorRemoved(AncestorEvent event) {
+            }
+
+            @Override
+            public void ancestorMoved(AncestorEvent event) {
+            }
+        });
+        if (!form(parent, messages, titleKey, panel)) {
+            return Optional.empty();
+        }
+        String text = field.getText().strip();
+        return text.isEmpty() ? Optional.empty() : Optional.of(text);
     }
 
     static Choice unsaved(Component parent, Messages messages, String documentName) {

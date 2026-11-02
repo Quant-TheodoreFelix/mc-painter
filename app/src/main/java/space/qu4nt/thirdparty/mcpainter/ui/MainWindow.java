@@ -8,15 +8,20 @@ import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.prefs.BackingStoreException;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.WindowConstants;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -73,10 +78,31 @@ final class MainWindow {
         this.nativeQuit = Desktop.isDesktopSupported()
                 && Desktop.getDesktop().isSupported(Desktop.Action.APP_QUIT_HANDLER);
 
-        ToolPanel tools = new ToolPanel(brush, messages);
+        BrushActions brushes = new BrushActions(frame, messages, brush, new BrushCatalog(messages),
+                BrushLibrary.user(), document, status::notice);
+        brushes.loadLibrary();
+        ToolPanel tools = new ToolPanel(brush, messages, brushes);
+        PresetPanel presets = new PresetPanel(brushes, messages);
         TerrainPanel terrain = new TerrainPanel(brush, document, messages, status::notice);
+        JPanel left = new JPanel();
+        left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
+        tools.component().setAlignmentX(0);
+        JComponent presetSection = presets.component();
+        presetSection.setAlignmentX(0);
+        JPanel presetHolder = new JPanel(new BorderLayout());
+        presetHolder.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 4));
+        presetHolder.add(presetSection, BorderLayout.CENTER);
+        presetHolder.setAlignmentX(0);
+        left.add(tools.component());
+        left.add(presetHolder);
+        JPanel leftColumn = new JPanel(new BorderLayout());
+        leftColumn.add(left, BorderLayout.NORTH);
+        JScrollPane leftScroll = new JScrollPane(leftColumn, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        leftScroll.setBorder(BorderFactory.createEmptyBorder());
+        leftScroll.getVerticalScrollBar().setUnitIncrement(16);
         JPanel content = new JPanel(new BorderLayout());
-        content.add(tools.component(), BorderLayout.WEST);
+        content.add(leftScroll, BorderLayout.WEST);
         content.add(map.component(), BorderLayout.CENTER);
         content.add(terrain.component(), BorderLayout.EAST);
         content.add(status.component(), BorderLayout.SOUTH);

@@ -9,6 +9,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -16,6 +17,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Ellipse2D;
+import java.awt.geom.Rectangle2D;
 import java.util.Optional;
 import java.util.SequencedSet;
 import javax.swing.AbstractAction;
@@ -458,15 +460,21 @@ final class MapView {
         int bz = blockZ(mouse.y);
         double cx = viewport.screenX(bx + 0.5);
         double cz = viewport.screenZ(bz + 0.5);
-        double r = Math.max(2, (settings.radius() + 0.5) * scale);
-        Ellipse2D circle = new Ellipse2D.Double(cx - r, cz - r, 2 * r, 2 * r);
+        Shape outline;
+        if (settings.shape().square()) {
+            double half = Math.max(2, (settings.radius() + 0.5) * scale);
+            outline = new Rectangle2D.Double(cx - half, cz - half, 2 * half, 2 * half);
+        } else {
+            double r = Math.max(2, (settings.radius() + 0.5) * scale);
+            outline = new Ellipse2D.Double(cx - r, cz - r, 2 * r, 2 * r);
+        }
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setStroke(new BasicStroke(3f));
         g.setColor(BRUSH_OUTER);
-        g.draw(circle);
+        g.draw(outline);
         g.setStroke(new BasicStroke(1f));
         g.setColor(BRUSH_INNER);
-        g.draw(circle);
+        g.draw(outline);
     }
 
     private int screenX(int worldX) {

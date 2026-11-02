@@ -45,6 +45,14 @@ final class FileChoosers {
         return open(owner, messages.text("chooser.openPng"), directory, PNG);
     }
 
+    static Optional<Path> openBrushFile(Frame owner, Messages messages, Path directory) {
+        return open(owner, messages.text("chooser.openBrush"), directory, "json");
+    }
+
+    static Optional<Path> openShapeImage(Frame owner, Messages messages, Path directory) {
+        return open(owner, messages.text("chooser.openShapeImage"), directory, PNG);
+    }
+
     static Optional<Path> saveProject(Frame owner, Messages messages, Path directory, String suggestedName) {
         FileDialog dialog = new FileDialog(owner, messages.text("chooser.saveProject"), FileDialog.SAVE);
         setDirectory(dialog, directory != null ? directory : home());

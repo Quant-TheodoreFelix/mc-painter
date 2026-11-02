@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
+import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -23,6 +24,7 @@ final class BrushSettings {
     private int waterLevel = 63;
     private String biome = WorldModel.DEFAULT_BIOME;
     private boolean autoAddTiles;
+    private BrushShape shape = BrushShape.CIRCLE;
     private final List<Runnable> listeners = new ArrayList<>();
 
     void addListener(Runnable listener) {
@@ -132,8 +134,33 @@ final class BrushSettings {
         }
     }
 
+    BrushShape shape() {
+        return shape;
+    }
+
+    void setShape(BrushShape value) {
+        Objects.requireNonNull(value, "shape");
+        if (!value.equals(shape)) {
+            shape = value;
+            fire();
+        }
+    }
+
+    void apply(BrushPreset preset, int minWaterLevel, int maxWaterLevel) {
+        tool = preset.tool();
+        radius = preset.radius();
+        strengthPercent = preset.strengthPercent();
+        falloff = preset.falloff();
+        shape = preset.shape();
+        terrain = preset.terrain();
+        biome = preset.biome();
+        waterLevel = Math.clamp(preset.waterLevel(), minWaterLevel, maxWaterLevel);
+        autoAddTiles = preset.autoAddTiles();
+        fire();
+    }
+
     Brush brush() {
-        return new Brush(radius, falloff);
+        return new Brush(radius, falloff, shape);
     }
 
     private void fire() {

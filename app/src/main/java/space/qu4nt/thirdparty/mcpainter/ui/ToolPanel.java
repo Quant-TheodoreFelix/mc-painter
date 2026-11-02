@@ -12,6 +12,8 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -36,11 +38,16 @@ final class ToolPanel {
     private final JLabel strengthValue = SafeText.label("");
     private final JComboBox<Brush.Falloff> falloff;
     private final JCheckBox autoAddTiles;
+    private final BrushActions actions;
+    private final DefaultComboBoxModel<ShapeEntry> shapeModel = new DefaultComboBoxModel<>();
+    private final JComboBox<ShapeEntry> shapes = new JComboBox<>(shapeModel);
+    private final JButton deleteShape;
     private boolean syncing;
 
-    ToolPanel(BrushSettings settings, Messages messages) {
+    ToolPanel(BrushSettings settings, Messages messages, BrushActions actions) {
         this.settings = settings;
         this.messages = messages;
+        this.actions = actions;
 
         JPanel tools = new JPanel(new GridLayout(0, 2, 4, 4));
         tools.setBorder(section(messages.text("panel.tools")));
@@ -91,6 +98,27 @@ final class ToolPanel {
             }
         });
 
+        shapes.setRenderer(Renderers.withIcon(ShapeEntry::name, ShapeEntry::icon));
+        shapes.setMaximumRowCount(12);
+        shapes.addActionListener(e -> {
+            if (!syncing && shapes.getSelectedItem() instanceof ShapeEntry entry) {
+                actions.selectShape(entry);
+            }
+        });
+        JButton addShape = SafeText.plain(new JButton(messages.text("shape.add")));
+        addShape.setFocusable(false);
+        addShape.addActionListener(e -> actions.addShape());
+        deleteShape = SafeText.plain(new JButton(messages.text("shape.delete")));
+        deleteShape.setFocusable(false);
+        deleteShape.addActionListener(e -> {
+            if (shapes.getSelectedItem() instanceof ShapeEntry entry) {
+                actions.deleteShape(entry);
+            }
+        });
+        JPanel shapeButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+        shapeButtons.add(addShape);
+        shapeButtons.add(deleteShape);
+
         JPanel brush = new JPanel(new GridBagLayout());
         brush.setBorder(section(messages.text("panel.brush")));
         addRow(brush, 0, SafeText.label(messages.text("brush.radius")), radiusSpinner);
@@ -98,7 +126,9 @@ final class ToolPanel {
         addRow(brush, 2, SafeText.label(messages.text("brush.strength")), strengthValue);
         addWide(brush, 3, strengthSlider);
         addRow(brush, 4, SafeText.label(messages.text("brush.falloff")), falloff);
-        addWide(brush, 5, autoAddTiles);
+        addRow(brush, 5, SafeText.label(messages.text("shape.label")), shapes);
+        addWide(brush, 6, shapeButtons);
+        addWide(brush, 7, autoAddTiles);
 
         JPanel stack = new JPanel();
         stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
@@ -108,10 +138,11 @@ final class ToolPanel {
         stack.add(Box.createVerticalStrut(8));
         stack.add(brush);
         panel.add(stack, BorderLayout.NORTH);
-        panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 4));
+        panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 0, 4));
 
         settings.addListener(this::sync);
-        sync();
+        actions.catalog().addListener(this::reloadShapes);
+        reloadShapes();
     }
 
     JComponent component() {
@@ -136,9 +167,33 @@ final class ToolPanel {
             falloff.setSelectedItem(settings.falloff());
             autoAddTiles.setSelected(settings.autoAddTiles());
             autoAddTiles.setEnabled(settings.tool() != Tool.ADD_TILES);
+            ShapeEntry current = null;
+            for (int i = 0; i < shapeModel.getSize(); i++) {
+                if (shapeModel.getElementAt(i).shape().equals(settings.shape())) {
+                    current = shapeModel.getElementAt(i);
+                }
+            }
+            if (current == null) {
+                current = actions.catalog().entryFor(settings.shape(), messages.text("shape.session"));
+            }
+            shapes.setSelectedItem(current);
+            deleteShape.setEnabled(current.kind() != ShapeEntry.Kind.BUILTIN);
         } finally {
             syncing = false;
         }
+    }
+
+    private void reloadShapes() {
+        syncing = true;
+        try {
+            shapeModel.removeAllElements();
+            for (ShapeEntry entry : actions.catalog().shapes()) {
+                shapeModel.addElement(entry);
+            }
+        } finally {
+            syncing = false;
+        }
+        sync();
     }
 
     static Border section(String title) {

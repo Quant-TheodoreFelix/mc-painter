@@ -149,7 +149,8 @@ final class BrushStroke {
                 double nearestZ = Math.clamp(z, pos.minBlockZ(), pos.minBlockZ() + Tile.SIZE - 1);
                 double ddx = nearestX - x;
                 double ddz = nearestZ - z;
-                if (ddx * ddx + ddz * ddz > reach || model.tile(pos).isPresent()) {
+                boolean touches = brush.shape().square() || ddx * ddx + ddz * ddz <= reach;
+                if (!touches || model.tile(pos).isPresent()) {
                     continue;
                 }
                 if (model.tileCount() >= model.maxTiles()) {
