@@ -79,7 +79,8 @@ class BrushTest {
         assertThrows(IllegalArgumentException.class, () -> new BrushShape.Mask(2, new byte[3]));
         assertThrows(IllegalArgumentException.class, () -> new BrushShape.Mask(0, new byte[0]));
         assertThrows(IllegalArgumentException.class,
-                () -> new BrushShape.Mask(BrushShape.Mask.MAX_SIZE + 1, new byte[257 * 257]));
+                () -> new BrushShape.Mask(BrushShape.Mask.MAX_SIZE + 1,
+                        new byte[(BrushShape.Mask.MAX_SIZE + 1) * (BrushShape.Mask.MAX_SIZE + 1)]));
         assertThrows(NullPointerException.class, () -> new Brush(1, Brush.Falloff.LINEAR, null));
     }
 }

@@ -35,12 +35,13 @@ public final class HeightmapImporter {
     }
 
     public static WorldModel importPng(Path file, Options options) throws IOException {
-        BufferedImage image = SafePng.read(file, "heightmap", MAX_FILE_BYTES, MAX_DIMENSION, (width, height) -> {
-            long tiles = (long) ceilDiv(width, Tile.SIZE) * ceilDiv(height, Tile.SIZE);
-            if (tiles > options.maxTiles()) {
-                throw new IOException("heightmap needs " + tiles + " tiles, limit " + options.maxTiles());
-            }
-        });
+        BufferedImage image = SafeImage.read(file, "heightmap", MAX_FILE_BYTES, MAX_DIMENSION, SafeImage.PNG, 0,
+                (width, height) -> {
+                    long tiles = (long) ceilDiv(width, Tile.SIZE) * ceilDiv(height, Tile.SIZE);
+                    if (tiles > options.maxTiles()) {
+                        throw new IOException("heightmap needs " + tiles + " tiles, limit " + options.maxTiles());
+                    }
+                }).image();
         return buildModel(toFractions(image), options);
     }
 

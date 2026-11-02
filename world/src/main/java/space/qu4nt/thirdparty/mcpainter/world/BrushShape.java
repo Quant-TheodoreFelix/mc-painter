@@ -15,7 +15,7 @@ public sealed interface BrushShape permits BrushShape.Circle, BrushShape.Square,
 
     record Mask(int size, byte[] data) implements BrushShape {
 
-        public static final int MAX_SIZE = 256;
+        public static final int MAX_SIZE = 512;
 
         public Mask {
             if (size < 1 || size > MAX_SIZE) {
