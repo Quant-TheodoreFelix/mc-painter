@@ -42,6 +42,20 @@ public final class Edit implements AutoCloseable {
         return true;
     }
 
+    public boolean removeTile(TilePos pos) {
+        requireOpen();
+        Objects.requireNonNull(pos, "pos");
+        Map<TilePos, Tile> tiles = model.tilesForEdit();
+        Tile tile = tiles.remove(pos);
+        if (tile == null) {
+            return false;
+        }
+        if (!before.containsKey(pos)) {
+            before.put(pos, tile);
+        }
+        return true;
+    }
+
     public boolean setHeight(int x, int z, float height) {
         Tile tile = writable(x, z);
         if (tile == null) {
@@ -109,7 +123,9 @@ public final class Edit implements AutoCloseable {
         while (entries.hasNext()) {
             Map.Entry<TilePos, Tile> entry = entries.next();
             Tile now = tiles.get(entry.getKey());
-            if (entry.getValue() != null && now != null && entry.getValue().sameContent(now)) {
+            boolean unchanged = entry.getValue() == null ? now == null
+                    : now != null && entry.getValue().sameContent(now);
+            if (unchanged) {
                 entries.remove();
             }
         }

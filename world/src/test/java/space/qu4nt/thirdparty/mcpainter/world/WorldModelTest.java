@@ -129,6 +129,53 @@ class WorldModelTest {
     }
 
     @Test
+    void removedTilesComeBackWithUndo() {
+        WorldModel model = twoTiles();
+        try (Edit edit = model.beginEdit("raise")) {
+            edit.setHeight(130, 5, 99);
+        }
+        long raised = model.revision();
+        try (Edit edit = model.beginEdit("remove")) {
+            edit.setHeight(130, 6, 70);
+            assertTrue(edit.removeTile(new TilePos(1, 0)));
+            assertFalse(edit.removeTile(new TilePos(1, 0)));
+            assertFalse(edit.removeTile(new TilePos(5, 5)));
+            assertFalse(edit.setHeight(130, 5, 10));
+        }
+        assertEquals(List.of(new TilePos(0, 0)), model.tilePositions());
+        assertFalse(model.contains(130, 5));
+        assertEquals("remove", model.undoLabel().orElseThrow());
+        assertTrue(model.undo());
+        assertEquals(raised, model.revision());
+        assertEquals(99f, model.height(130, 5));
+        assertEquals(64f, model.height(130, 6));
+        assertTrue(model.redo());
+        assertEquals(1, model.tileCount());
+        assertTrue(model.undo());
+        assertEquals(2, model.tileCount());
+    }
+
+    @Test
+    void addingAndRemovingInOneEditLeavesNoHistory() {
+        WorldModel model = twoTiles();
+        long before = model.revision();
+        try (Edit edit = model.beginEdit("blip")) {
+            assertTrue(edit.addTile(new TilePos(3, 3), 64, TerrainType.SAND));
+            assertTrue(edit.removeTile(new TilePos(3, 3)));
+        }
+        assertEquals(before, model.revision());
+        assertEquals("setup", model.undoLabel().orElseThrow());
+        try (Edit edit = model.beginEdit("swap")) {
+            edit.removeTile(new TilePos(0, 0));
+            edit.addTile(new TilePos(0, 0), 10, TerrainType.STONE);
+        }
+        assertEquals(10f, model.height(0, 0));
+        model.undo();
+        assertEquals(64f, model.height(0, 0));
+        assertEquals(TerrainType.GRASS, model.terrain(0, 0));
+    }
+
+    @Test
     void onlyOneEditAtATime() {
         WorldModel model = twoTiles();
         Edit first = model.beginEdit("first");
