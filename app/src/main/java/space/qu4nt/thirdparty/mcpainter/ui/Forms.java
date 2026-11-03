@@ -16,6 +16,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JSpinner;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
@@ -219,8 +220,7 @@ final class Forms {
         }
     }
 
-    static Optional<NewWorld> newWorld(Component parent, Messages messages, int budgetTiles) {
-        NewWorldForm form = new NewWorldForm(messages, budgetTiles);
+    static Optional<NewWorld> newWorld(Component parent, Messages messages, NewWorldForm form) {
         while (Dialogs.form(parent, messages, "new.title", form.panel())) {
             Optional<NewWorld> spec = form.read();
             if (spec.isPresent()) {
@@ -231,33 +231,51 @@ final class Forms {
         return Optional.empty();
     }
 
-    static StartChoice start(Component parent, Messages messages, int budgetTiles, boolean hasTempSaves) {
-        NewWorldForm form = new NewWorldForm(messages, budgetTiles);
-        JPanel content = new JPanel(new java.awt.BorderLayout(0, 10));
-        content.add(SafeText.message(messages.text(hasTempSaves ? "start.hintRestore" : "start.hint")),
-                java.awt.BorderLayout.NORTH);
-        content.add(form.panel(), java.awt.BorderLayout.CENTER);
-        Object[] options = {messages.text("start.create"), messages.text("start.open"),
-                messages.text("start.restore"), messages.text("dialog.cancel")};
-        while (true) {
-            int result = JOptionPane.showOptionDialog(parent, content, messages.text("new.title"),
-                    JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
-            switch (result) {
-                case 0 -> {
-                    Optional<NewWorld> world = form.read();
-                    if (world.isPresent()) {
-                        return new StartChoice(Start.CREATE, world);
+    static final class StartDialog {
+
+        private final Component parent;
+        private final Messages messages;
+        private final NewWorldForm form;
+        private final JTextArea hint;
+        private final JPanel content = new JPanel(new java.awt.BorderLayout(0, 10));
+
+        StartDialog(Component parent, Messages messages, int budgetTiles) {
+            this.parent = parent;
+            this.messages = messages;
+            this.form = new NewWorldForm(messages, budgetTiles);
+            this.hint = SafeText.message(messages.text("start.hint"));
+            content.add(hint, java.awt.BorderLayout.NORTH);
+            content.add(form.panel(), java.awt.BorderLayout.CENTER);
+        }
+
+        NewWorldForm form() {
+            return form;
+        }
+
+        StartChoice show(boolean hasTempSaves) {
+            SafeText.setText(hint, messages.text(hasTempSaves ? "start.hintRestore" : "start.hint"));
+            Object[] options = {messages.text("start.create"), messages.text("start.open"),
+                    messages.text("start.restore"), messages.text("dialog.cancel")};
+            while (true) {
+                int result = JOptionPane.showOptionDialog(parent, content, messages.text("new.title"),
+                        JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+                switch (result) {
+                    case 0 -> {
+                        Optional<NewWorld> world = form.read();
+                        if (world.isPresent()) {
+                            return new StartChoice(Start.CREATE, world);
+                        }
+                        Dialogs.error(parent, messages, messages.text("new.invalidSize"), "");
                     }
-                    Dialogs.error(parent, messages, messages.text("new.invalidSize"), "");
-                }
-                case 1 -> {
-                    return new StartChoice(Start.OPEN, Optional.empty());
-                }
-                case 2 -> {
-                    return new StartChoice(Start.RESTORE, Optional.empty());
-                }
-                default -> {
-                    return new StartChoice(Start.CANCEL, Optional.empty());
+                    case 1 -> {
+                        return new StartChoice(Start.OPEN, Optional.empty());
+                    }
+                    case 2 -> {
+                        return new StartChoice(Start.RESTORE, Optional.empty());
+                    }
+                    default -> {
+                        return new StartChoice(Start.CANCEL, Optional.empty());
+                    }
                 }
             }
         }

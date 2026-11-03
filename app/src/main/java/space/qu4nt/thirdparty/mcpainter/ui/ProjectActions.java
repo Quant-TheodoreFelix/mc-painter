@@ -78,14 +78,18 @@ final class ProjectActions {
     }
 
     void start() {
-        boolean temp = !otherWorkspaces().isEmpty();
-        Forms.StartChoice choice = Forms.start(frame, messages, budgetTiles(), temp);
-        switch (choice.action()) {
-            case CREATE -> create(choice.world().orElseThrow(), () -> {
-            });
-            case OPEN -> open();
-            case RESTORE -> restore();
-            case CANCEL -> {
+        Forms.StartDialog dialog = new Forms.StartDialog(frame, messages, budgetTiles());
+        while (true) {
+            Forms.StartChoice choice = dialog.show(!otherWorkspaces().isEmpty());
+            boolean done = switch (choice.action()) {
+                case CREATE -> create(choice.world().orElseThrow(), () -> {
+                });
+                case OPEN -> open();
+                case RESTORE -> restore();
+                case CANCEL -> true;
+            };
+            if (done) {
+                return;
             }
         }
     }
@@ -95,14 +99,16 @@ final class ProjectActions {
         if (release.isEmpty()) {
             return;
         }
-        Optional<Forms.NewWorld> spec = Forms.newWorld(frame, messages, budgetTiles());
-        if (spec.isEmpty()) {
-            return;
+        Forms.NewWorldForm form = new Forms.NewWorldForm(messages, budgetTiles());
+        while (true) {
+            Optional<Forms.NewWorld> spec = Forms.newWorld(frame, messages, form);
+            if (spec.isEmpty() || create(spec.get(), release.get())) {
+                return;
+            }
         }
-        create(spec.get(), release.get());
     }
 
-    private void create(Forms.NewWorld world, Runnable release) {
+    private boolean create(Forms.NewWorld world, Runnable release) {
         int budget = budgetTiles();
         int threads = threads();
         String name = messages.text("app.untitled");
@@ -115,21 +121,22 @@ final class ProjectActions {
             if (!created.cancelled()) {
                 Dialogs.error(frame, messages, "error.create", created.error());
             }
-            return;
+            return false;
         }
         release.run();
         document.open(created.value().workspace(), created.value().model(), null);
         announceArea();
+        return true;
     }
 
-    void open() {
+    boolean open() {
         Optional<Runnable> release = confirmDiscard();
         if (release.isEmpty()) {
-            return;
+            return false;
         }
         Optional<Path> file = FileChoosers.openProject(frame, messages, projectDirectory);
         if (file.isEmpty()) {
-            return;
+            return false;
         }
         Path path = file.get();
         projectDirectory = path.getParent();
@@ -152,26 +159,27 @@ final class ProjectActions {
             if (!loaded.cancelled()) {
                 Dialogs.error(frame, messages, "error.open", loaded.error());
             }
-            return;
+            return false;
         }
         release.get().run();
         document.open(loaded.value().workspace(), loaded.value().model(), path);
         announceArea();
+        return true;
     }
 
-    void restore() {
+    boolean restore() {
         List<Workspace.Summary> candidates = otherWorkspaces();
         if (candidates.isEmpty()) {
             Dialogs.info(frame, messages, "restore.title", messages.text("restore.none"));
-            return;
+            return false;
         }
         Optional<Workspace.Summary> chosen = RestoreForm.choose(frame, messages, candidates, this::deleteWorkspace);
         if (chosen.isEmpty()) {
-            return;
+            return false;
         }
         Optional<Runnable> release = confirmDiscard();
         if (release.isEmpty()) {
-            return;
+            return false;
         }
         int budget = budgetTiles();
         int threads = threads();
@@ -192,12 +200,13 @@ final class ProjectActions {
                         ? messages.text("restore.locked") : messages.text("error.restore"),
                         Dialogs.describe(opened.error()));
             }
-            return;
+            return false;
         }
         release.get().run();
         Workspace workspace = opened.value().workspace();
         document.open(workspace, opened.value().model(), workspace.state().project().orElse(null));
         announceArea();
+        return true;
     }
 
     boolean save() {
