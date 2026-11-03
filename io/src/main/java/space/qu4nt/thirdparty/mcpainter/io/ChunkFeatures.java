@@ -70,9 +70,16 @@ final class ChunkFeatures {
 
     static ChunkFeatures generate(WorldModel model, BlockCatalog catalog, BaseBlocks base, int chunkX, int chunkZ,
             int minY, int maxY) {
+        return generate(model, catalog, base, chunkX, chunkZ, minY, maxY, true);
+    }
+
+    static ChunkFeatures generate(WorldModel model, BlockCatalog catalog, BaseBlocks base, int chunkX, int chunkZ,
+            int minY, int maxY, boolean ores) {
         ChunkFeatures features = new ChunkFeatures(model, catalog, base, chunkX, chunkZ, minY, maxY);
-        for (Ore ore : ORES) {
-            features.placeOre(ore);
+        if (ores) {
+            for (Ore ore : ORES) {
+                features.placeOre(ore);
+            }
         }
         if (catalog.has(Block.OAK_LOG) && catalog.has(Block.OAK_LEAVES)) {
             features.placeTrees();
@@ -87,6 +94,20 @@ final class ChunkFeatures {
 
     int size() {
         return blocks.size();
+    }
+
+    void tops(int[] topY, BlockStateEntry[] topState) {
+        java.util.Arrays.fill(topY, Integer.MIN_VALUE);
+        java.util.Arrays.fill(topState, null);
+        for (Map.Entry<Integer, BlockStateEntry> entry : blocks.entrySet()) {
+            int key = entry.getKey();
+            int column = key & 0xFF;
+            int y = (key >> 8) + minY;
+            if (y > topY[column]) {
+                topY[column] = y;
+                topState[column] = entry.getValue();
+            }
+        }
     }
 
     private int key(int x, int y, int z) {

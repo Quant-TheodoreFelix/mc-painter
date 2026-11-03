@@ -202,6 +202,14 @@ public final class WorldExporter {
             return biome[(z - originZ) * 16 + (x - originX)];
         }
 
+        int surface(int column) {
+            return surface[column];
+        }
+
+        int water(int column) {
+            return water[column];
+        }
+
         BlockStateEntry blockAt(int x, int y, int z) {
             int i = (z - originZ) * 16 + (x - originX);
             if (y == minY) {

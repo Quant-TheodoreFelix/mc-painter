@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import space.qu4nt.thirdparty.mcpainter.anvil.chunk.BlockStateEntry;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.DataVersions;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
@@ -121,6 +122,7 @@ public final class BlockCatalog {
     private final Map<Block, BlockStateEntry> states = new LinkedHashMap<>();
     private final Map<Variant, BlockStateEntry> variants = new HashMap<>();
     private final Map<BlockStateEntry, BlockTraits> traits = new HashMap<>();
+    private final Map<BlockStateEntry, Block> blocks = new HashMap<>();
 
     public BlockCatalog(int dataVersion) {
         if (!DataVersions.isSupported(dataVersion)) {
@@ -134,6 +136,7 @@ public final class BlockCatalog {
                 forms.put(block, form);
                 states.put(block, state);
                 traits.put(state, block.traits());
+                blocks.put(state, block);
             }
         }
     }
@@ -175,6 +178,7 @@ public final class BlockCatalog {
             properties.putAll(key.properties());
             BlockStateEntry state = BlockStateEntry.of(base.id(), properties);
             traits.put(state, block.traits());
+            blocks.put(state, block);
             return state;
         });
     }
@@ -185,6 +189,10 @@ public final class BlockCatalog {
             throw new IllegalArgumentException("block state not in catalog: " + state.id());
         }
         return known;
+    }
+
+    public Optional<Block> block(BlockStateEntry state) {
+        return Optional.ofNullable(blocks.get(Objects.requireNonNull(state, "state")));
     }
 
     public List<Block> available() {

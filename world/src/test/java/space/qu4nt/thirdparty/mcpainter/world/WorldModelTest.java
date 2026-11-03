@@ -272,4 +272,31 @@ class WorldModelTest {
         assertThrows(IllegalArgumentException.class, () -> WorldModel.builder(-64, 320, 62)
                 .biomes(List.of("minecraft:plains", "minecraft:plains")));
     }
+
+    @Test
+    void snapshotsCopySelectedTilesAndIgnoreLaterEdits() {
+        WorldModel model = WorldModel.builder(-64, 320, 62).generation(new GenerationSettings(5, false)).build();
+        try (Edit edit = model.beginEdit("setup")) {
+            edit.addTile(new TilePos(0, 0), 70, TerrainType.GRASS);
+            edit.addTile(new TilePos(1, 0), 80, TerrainType.SAND);
+            edit.setBiome(3, 3, "minecraft:desert");
+            edit.setLayer(4, 4, Layer.PEONY, 99);
+        }
+        WorldModel copy = model.snapshot(List.of(new TilePos(0, 0), new TilePos(5, 5)));
+        assertEquals(1, copy.tileCount());
+        assertFalse(copy.contains(130, 0));
+        assertEquals(5, copy.generation().seed());
+        assertEquals(model.minY(), copy.minY());
+        assertEquals("minecraft:desert", copy.biome(3, 3));
+        assertEquals(99, copy.layer(4, 4, Layer.PEONY));
+        try (Edit edit = model.beginEdit("later")) {
+            edit.setHeight(3, 3, 90);
+            edit.setBiome(5, 5, "minecraft:swamp");
+            edit.setLayer(4, 4, Layer.PEONY, 0);
+        }
+        assertEquals(70, copy.height(3, 3));
+        assertEquals(99, copy.layer(4, 4, Layer.PEONY));
+        assertEquals("minecraft:plains", copy.biome(5, 5));
+        assertEquals(0, copy.revision());
+    }
 }

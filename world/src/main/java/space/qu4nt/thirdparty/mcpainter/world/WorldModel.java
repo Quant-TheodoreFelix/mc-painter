@@ -1,6 +1,7 @@
 package space.qu4nt.thirdparty.mcpainter.world;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -115,6 +116,17 @@ public final class WorldModel {
 
     public Optional<Tile> tile(TilePos pos) {
         return Optional.ofNullable(tiles.get(pos));
+    }
+
+    public WorldModel snapshot(Collection<TilePos> positions) {
+        Map<TilePos, Tile> copies = new HashMap<>();
+        for (TilePos pos : positions) {
+            Tile tile = tiles.get(Objects.requireNonNull(pos, "pos"));
+            if (tile != null) {
+                copies.put(pos, tile.copy());
+            }
+        }
+        return new WorldModel(minY, maxY, seaLevel, maxTiles, new ArrayList<>(biomes), copies, generation);
     }
 
     public boolean contains(int x, int z) {
