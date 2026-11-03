@@ -134,6 +134,7 @@ public final class Workspace implements Closeable {
     private final FileChannel lockChannel;
     private final FileLock lock;
     private final Map<TilePos, Entry> entries;
+    private final Map<TilePos, Set<TilePos>> byGroup = new HashMap<>();
     private WorldSpec spec;
     private State state;
     private boolean closed;
@@ -146,6 +147,9 @@ public final class Workspace implements Closeable {
         this.spec = spec;
         this.state = state;
         this.entries = entries;
+        for (TilePos pos : entries.keySet()) {
+            byGroup.computeIfAbsent(group(pos), g -> new HashSet<>()).add(pos);
+        }
     }
 
     public static Workspace create(Path root, WorldSpec spec, String name) throws IOException {
@@ -255,6 +259,42 @@ public final class Workspace implements Closeable {
         return Collections.unmodifiableCollection(entries.values());
     }
 
+    public List<TilePos> storedIn(TileRect rect) {
+        List<TilePos> found = new ArrayList<>();
+        int minGroupX = Math.floorDiv(rect.minX(), GROUP);
+        int minGroupZ = Math.floorDiv(rect.minZ(), GROUP);
+        int maxGroupX = Math.floorDiv(rect.maxX(), GROUP);
+        int maxGroupZ = Math.floorDiv(rect.maxZ(), GROUP);
+        long groups = (maxGroupX - (long) minGroupX + 1) * (maxGroupZ - (long) minGroupZ + 1);
+        if (groups > byGroup.size()) {
+            for (Map.Entry<TilePos, Set<TilePos>> group : byGroup.entrySet()) {
+                TilePos g = group.getKey();
+                if (g.x() >= minGroupX && g.x() <= maxGroupX && g.z() >= minGroupZ && g.z() <= maxGroupZ) {
+                    collect(group.getValue(), rect, found);
+                }
+            }
+        } else {
+            for (int gz = minGroupZ; gz <= maxGroupZ; gz++) {
+                for (int gx = minGroupX; gx <= maxGroupX; gx++) {
+                    Set<TilePos> members = byGroup.get(new TilePos(gx, gz));
+                    if (members != null) {
+                        collect(members, rect, found);
+                    }
+                }
+            }
+        }
+        found.sort(null);
+        return found;
+    }
+
+    private static void collect(Set<TilePos> members, TileRect rect, List<TilePos> found) {
+        for (TilePos pos : members) {
+            if (rect.contains(pos)) {
+                found.add(pos);
+            }
+        }
+    }
+
     public int pendingCount() {
         int pending = 0;
         for (Entry entry : entries.values()) {
@@ -294,11 +334,15 @@ public final class Workspace implements Closeable {
     }
 
     public void loadInto(WorldModel.Builder builder, TilePos pos) throws IOException {
+        TileCodec.apply(builder, decode(pos));
+    }
+
+    TileCodec.Decoded decode(TilePos pos) throws IOException {
         CompoundTag tag = TileCodec.gunzip(readRaw(pos), TileCodec.TILE_LIMITS);
         if (!TileCodec.position(tag).equals(pos)) {
             throw new ProjectFormatException("tile file for " + pos + " holds another tile");
         }
-        TileCodec.addTo(builder, tag, List.of(TerrainType.values()), ProjectFile.FORMAT_VERSION);
+        return TileCodec.decode(tag, List.of(TerrainType.values()), ProjectFile.FORMAT_VERSION);
     }
 
     public void write(List<Write> writes, boolean durable) throws IOException {
@@ -313,13 +357,20 @@ public final class Workspace implements Closeable {
             Path file = tileFile(write.pos());
             if (write.tile() == null) {
                 AtomicFiles.deleteIfExists(file);
-                entries.remove(write.pos());
+                if (entries.remove(write.pos()) != null) {
+                    Set<TilePos> members = byGroup.get(group);
+                    members.remove(write.pos());
+                    if (members.isEmpty()) {
+                        byGroup.remove(group);
+                    }
+                }
                 continue;
             }
             Files.createDirectories(file.getParent());
             byte[] bytes = TileCodec.gzip(TileCodec.encode(write.pos(), write.tile()));
             AtomicFiles.write(file, channel -> writeFully(channel, bytes), durable);
             entries.put(write.pos(), new Entry(write.pos(), write.pending(), write.thumb()));
+            byGroup.computeIfAbsent(group, g -> new HashSet<>()).add(write.pos());
         }
         for (TilePos group : groups) {
             writeIndex(group, durable);

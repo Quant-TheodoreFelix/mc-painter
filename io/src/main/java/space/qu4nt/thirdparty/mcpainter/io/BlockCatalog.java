@@ -1,11 +1,11 @@
 package space.qu4nt.thirdparty.mcpainter.io;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import space.qu4nt.thirdparty.mcpainter.anvil.chunk.BlockStateEntry;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.DataVersions;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
@@ -120,9 +120,9 @@ public final class BlockCatalog {
     private final int dataVersion;
     private final Map<Block, Form> forms = new LinkedHashMap<>();
     private final Map<Block, BlockStateEntry> states = new LinkedHashMap<>();
-    private final Map<Variant, BlockStateEntry> variants = new HashMap<>();
-    private final Map<BlockStateEntry, BlockTraits> traits = new HashMap<>();
-    private final Map<BlockStateEntry, Block> blocks = new HashMap<>();
+    private final Map<Variant, BlockStateEntry> variants = new ConcurrentHashMap<>();
+    private final Map<BlockStateEntry, BlockTraits> traits = new ConcurrentHashMap<>();
+    private final Map<BlockStateEntry, Block> blocks = new ConcurrentHashMap<>();
 
     public BlockCatalog(int dataVersion) {
         if (!DataVersions.isSupported(dataVersion)) {

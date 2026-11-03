@@ -2,6 +2,7 @@ package space.qu4nt.thirdparty.mcpainter.io;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -31,11 +32,13 @@ import space.qu4nt.thirdparty.mcpainter.nbt.RootTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.StringTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.Tag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
+import space.qu4nt.thirdparty.mcpainter.world.BaseTerrain;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
+import space.qu4nt.thirdparty.mcpainter.world.TileRect;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 class WorldExporterTest {
@@ -218,5 +221,110 @@ class WorldExporterTest {
         ChunkSection section = chunk.sections().stream().filter(s -> s.y() == sectionY).findFirst().orElseThrow();
         return section.blocks().orElseThrow()
                 .get(ChunkSection.blockIndex(worldX & 15, Math.floorMod(y, 16), worldZ & 15)).id().toString();
+    }
+
+    private static int chunkCount(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return 0;
+        }
+        int count = 0;
+        try (RegionFile region = RegionFile.open(file)) {
+            for (int z = 0; z < 32; z++) {
+                for (int x = 0; x < 32; x++) {
+                    if (region.readChunk(x, z).isPresent()) {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    @Test
+    void writesOnlyTheChosenTilesInParallel() throws IOException {
+        writeTemplate();
+        WorldModel model = WorldModel.create(-64, 320, 63);
+        try (Edit edit = model.beginEdit("setup")) {
+            for (TilePos pos : List.of(new TilePos(0, 0), new TilePos(5, 0), new TilePos(-1, 0))) {
+                edit.addTile(pos, 70, TerrainType.GRASS);
+            }
+        }
+        List<Long> reports = new ArrayList<>();
+        WorldExporter.Result result = WorldExporter.export(model, world,
+                List.of(new TilePos(5, 0), new TilePos(-1, 0), new TilePos(9, 9)), 3,
+                (done, total) -> reports.add(total));
+        assertEquals(2, result.regionsWritten());
+        assertEquals(128, result.chunksCreated());
+        assertEquals(1, chunkCount(world.resolve("region/r.0.0.mca")));
+        assertEquals(64, chunkCount(world.resolve("region/r.1.0.mca")));
+        assertEquals(64, chunkCount(world.resolve("region/r.-1.0.mca")));
+        assertEquals(List.of(2L, 2L, 2L), reports);
+    }
+
+    @Test
+    void stopsWhenCancelledAndEstimatesTheWork() throws IOException {
+        writeTemplate();
+        WorldModel model = WorldModel.create(-64, 320, 63);
+        try (Edit edit = model.beginEdit("setup")) {
+            for (int x = 0; x < 12; x += 4) {
+                edit.addTile(new TilePos(x, 0), 70, TerrainType.GRASS);
+            }
+        }
+        int[] calls = new int[1];
+        WorldExporter.Result result = WorldExporter.export(model, world, model.tilePositions(), 1,
+                (done, total) -> ++calls[0] < 2);
+        assertTrue(result.cancelled());
+        assertEquals(1, result.regionsWritten());
+
+        WorldExporter.Estimate estimate = WorldExporter.estimate(390_625, 24_649, 4);
+        assertEquals(25_000_000L, estimate.chunks());
+        assertEquals(25_000_000L * 4096 + 24_649L * 8192, estimate.bytes());
+        assertEquals((long) Math.ceil(390_625 * WorldExporter.SECONDS_PER_TILE / 4), estimate.seconds());
+        assertEquals(157L * 157L, WorldExporter.regionCount(TileRect.centeredBlocks(80_000, 80_000)));
+        assertEquals(List.of(new TileRect(-1, 0, -1, 0), new TileRect(0, 0, 2, 0)),
+                WorldExporter.regionRects(new TileRect(-1, 0, 2, 0)));
+    }
+
+    @Test
+    void exportsAWholeFlatWorkspaceRegionByRegion() throws IOException {
+        writeTemplate();
+        WorldSpec spec = new WorldSpec(-64, 320, 63, List.of("minecraft:plains"), new GenerationSettings(1, false),
+                new TileRect(-2, -1, 1, 0), BaseTerrain.flat(70.5f, TerrainType.GRASS));
+        try (Workspace workspace = Workspace.create(world.resolve("ws"), spec, "flat")) {
+            WorldModel area = AreaLoader.load(workspace, new TileRect(0, 0, 0, 0), 64, 2, Progress.NONE);
+            assertEquals(new TileRect(0, 0, 0, 0), area.editable());
+            assertEquals(6, area.tileCount());
+            try (Edit edit = area.beginEdit("paint")) {
+                edit.setHeight(5, 5, 100);
+                assertFalse(edit.setHeight(-5, 5, 100));
+            }
+            TilePos edited = new TilePos(0, 0);
+            workspace.write(List.of(new Workspace.Write(edited, area.tile(edited).orElseThrow(), new int[64], true)),
+                    true);
+            WorldExporter.Result result = AreaLoader.exportWorkspace(workspace, spec.bounds(), world, 2,
+                    Progress.NONE);
+            assertEquals(4, result.regionsWritten());
+            assertEquals(8 * 64, result.chunksCreated() + result.chunksReplaced());
+            try (RegionFile region = RegionFile.open(world.resolve("region/r.0.0.mca"))) {
+                ChunkData chunk = ChunkData.parse(region.readChunk(0, 0).orElseThrow());
+                assertEquals("minecraft:grass_block", blockAt(chunk, 5, 100, 5));
+                assertEquals("minecraft:grass_block", blockAt(chunk, 6, 70, 5));
+            }
+        }
+        WorldSpec empty = new WorldSpec(-64, 320, 63, List.of("minecraft:plains"), GenerationSettings.DEFAULT,
+                TileRect.WORLD, BaseTerrain.VOID);
+        try (Workspace workspace = Workspace.create(world.resolve("ws2"), empty, "void")) {
+            WorldModel model = WorldModel.create(-64, 320, 63);
+            try (Edit edit = model.beginEdit("add")) {
+                edit.addTile(new TilePos(40, 40), 70, TerrainType.SAND);
+            }
+            workspace.write(List.of(new Workspace.Write(new TilePos(40, 40),
+                    model.tile(new TilePos(40, 40)).orElseThrow(), new int[64], true)), true);
+            assertEquals(List.of(new TileRect(40, 40, 43, 43)), AreaLoader.regionsToWrite(workspace, TileRect.WORLD));
+            WorldExporter.Result result = AreaLoader.exportWorkspace(workspace, TileRect.WORLD, world, 2,
+                    Progress.NONE);
+            assertEquals(1, result.regionsWritten());
+            assertEquals(64, result.chunksCreated());
+        }
     }
 }

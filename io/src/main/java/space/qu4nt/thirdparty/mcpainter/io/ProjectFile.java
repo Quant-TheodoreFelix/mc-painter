@@ -44,12 +44,6 @@ public final class ProjectFile {
         int[] thumbnail(WorldModel model, TilePos pos);
     }
 
-    @FunctionalInterface
-    public interface Progress {
-
-        boolean report(long done, long total);
-    }
-
     private interface Visitor {
 
         void header(WorldSpec spec, List<TerrainType> terrainTypes, int version, int maxTiles) throws IOException;
@@ -117,7 +111,7 @@ public final class ProjectFile {
                 }
                 TileCodec.addTo(builder[0], tag, types[0], version[0]);
             }
-        }, (done, total) -> true);
+        }, Progress.NONE);
         try {
             return builder[0].build();
         } catch (IllegalArgumentException e) {

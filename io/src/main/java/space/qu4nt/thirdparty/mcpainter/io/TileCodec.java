@@ -127,8 +127,16 @@ final class TileCodec {
         return types;
     }
 
+    record Decoded(TilePos pos, float[] heights, byte[] terrain, short[] water, short[] biomes,
+            Map<Layer, Object> layers) {
+    }
+
     static TilePos addTo(WorldModel.Builder builder, CompoundTag tag, List<TerrainType> terrainTypes, int version)
             throws ProjectFormatException {
+        return apply(builder, decode(tag, terrainTypes, version));
+    }
+
+    static Decoded decode(CompoundTag tag, List<TerrainType> terrainTypes, int version) throws ProjectFormatException {
         int[] heightBits = requireArray(tag, "heights");
         byte[] terrainIndices = tag.get("terrain", ByteArrayTag.class)
                 .orElseThrow(() -> new ProjectFormatException("tile has no terrain")).toArray();
@@ -157,20 +165,32 @@ final class TileCodec {
             }
             biomes[i] = (short) biomeInts[i];
         }
-        try {
-            TilePos pos = position(tag);
-            builder.tile(pos, heights, terrain, water, biomes);
-            if (tag.contains("layers")) {
-                CompoundTag layers = tag.get("layers", CompoundTag.class)
-                        .orElseThrow(() -> new ProjectFormatException("layers must be a compound"));
-                for (Map.Entry<String, Tag> entry : layers.entries().entrySet()) {
-                    for (Layer layer : layersFor(entry.getKey(), version)) {
-                        switch (entry.getValue()) {
-                            case IntTag fill -> builder.layerFill(pos, layer, fill.value());
-                            case ByteArrayTag values -> builder.layer(pos, layer, values.toArray());
-                            default -> throw new ProjectFormatException("layer " + entry.getKey() + " has a wrong type");
-                        }
+        Map<Layer, Object> layerValues = new java.util.EnumMap<>(Layer.class);
+        if (tag.contains("layers")) {
+            CompoundTag layers = tag.get("layers", CompoundTag.class)
+                    .orElseThrow(() -> new ProjectFormatException("layers must be a compound"));
+            for (Map.Entry<String, Tag> entry : layers.entries().entrySet()) {
+                for (Layer layer : layersFor(entry.getKey(), version)) {
+                    switch (entry.getValue()) {
+                        case IntTag fill -> layerValues.put(layer, fill.value());
+                        case ByteArrayTag values -> layerValues.put(layer, values.toArray());
+                        default -> throw new ProjectFormatException("layer " + entry.getKey() + " has a wrong type");
                     }
+                }
+            }
+        }
+        return new Decoded(position(tag), heights, terrain, water, biomes, layerValues);
+    }
+
+    static TilePos apply(WorldModel.Builder builder, Decoded decoded) throws ProjectFormatException {
+        try {
+            TilePos pos = decoded.pos();
+            builder.tile(pos, decoded.heights(), decoded.terrain(), decoded.water(), decoded.biomes());
+            for (Map.Entry<Layer, Object> entry : decoded.layers().entrySet()) {
+                switch (entry.getValue()) {
+                    case Integer fill -> builder.layerFill(pos, entry.getKey(), fill);
+                    case byte[] values -> builder.layer(pos, entry.getKey(), values);
+                    default -> throw new ProjectFormatException("layer " + entry.getKey() + " has a wrong type");
                 }
             }
             return pos;
