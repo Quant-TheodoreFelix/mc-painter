@@ -69,6 +69,21 @@ final class ShapeEntry {
         return icon;
     }
 
+    static BufferedImage blank(int side) {
+        BufferedImage image = new BufferedImage(side, side, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            g.setColor(BACKGROUND);
+            g.fillRect(0, 0, side, side);
+            g.setColor(Color.GRAY);
+            g.drawRect(0, 0, side - 1, side - 1);
+            g.drawLine(0, side - 1, side - 1, 0);
+        } finally {
+            g.dispose();
+        }
+        return image;
+    }
+
     static BufferedImage thumbnail(BrushShape shape, int side) {
         BufferedImage image = new BufferedImage(side, side, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = image.createGraphics();

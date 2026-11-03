@@ -4,6 +4,7 @@ import java.awt.Desktop;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 import javax.swing.JFrame;
@@ -55,16 +56,48 @@ final class BrushActions {
         settings.setShape(entry.shape());
     }
 
-    void addShape() {
+    void addShapeFiles() {
         if (!ProjectActions.idle()) {
             return;
         }
-        Optional<Path> image = FileChoosers.openShapeImage(frame, messages, imageDirectory);
-        if (image.isEmpty()) {
+        List<Path> files = FileChoosers.openShapeImages(frame, messages, imageDirectory);
+        if (files.isEmpty()) {
             return;
         }
-        Path path = image.get();
-        imageDirectory = path.getParent();
+        imageDirectory = files.getFirst().getParent();
+        if (files.size() == 1) {
+            addShape(files.getFirst());
+            return;
+        }
+        BackgroundTask.Outcome<ShapeBatch.Previews> previews = BackgroundTask.run(frame, messages,
+                "task.readingShapes", () -> ShapeBatch.previews(files, 0));
+        addShapes(previews);
+    }
+
+    void addShapeFolder() {
+        if (!ProjectActions.idle()) {
+            return;
+        }
+        Optional<Path> folder = FileChoosers.chooseFolder(frame, messages.text("chooser.shapeFolder"),
+                imageDirectory);
+        if (folder.isEmpty()) {
+            return;
+        }
+        Path directory = folder.get();
+        imageDirectory = directory;
+        BackgroundTask.Outcome<ShapeBatch.Previews> previews = BackgroundTask.run(frame, messages,
+                "task.readingShapes", () -> {
+                    BrushMaskImporter.Listing listing = BrushMaskImporter.listImages(directory, ShapeBatch.MAX_FILES);
+                    return ShapeBatch.previews(listing.files(), listing.omitted());
+                });
+        if (previews.ok() && previews.value().items().isEmpty() && previews.value().unreadable().isEmpty()) {
+            Dialogs.info(frame, messages, "shape.batchTitle", messages.text("shape.folderEmpty"));
+            return;
+        }
+        addShapes(previews);
+    }
+
+    private void addShape(Path path) {
         BackgroundTask.Outcome<BrushMaskImporter.Source> source = BackgroundTask.run(frame, messages,
                 "task.readingShape", () -> BrushMaskImporter.read(path));
         if (!source.ok()) {
@@ -95,6 +128,53 @@ final class BrushActions {
         } catch (IOException | RuntimeException e) {
             Dialogs.error(frame, messages, "error.brushSave", e);
         }
+    }
+
+    private void addShapes(BackgroundTask.Outcome<ShapeBatch.Previews> previews) {
+        if (!previews.ok()) {
+            Dialogs.error(frame, messages, "error.brushShape", previews.error());
+            return;
+        }
+        ShapeBatch.Previews read = previews.value();
+        if (read.items().isEmpty()) {
+            Dialogs.error(frame, messages, messages.text("shape.batchNone"), messages.text("shape.batchUnreadable",
+                    Integer.toString(read.unreadable().size()), ShapeBatch.list(messages, read.unreadable())));
+            return;
+        }
+        ShapeBatchForm form = new ShapeBatchForm(messages, read);
+        while (true) {
+            if (!Dialogs.form(frame, messages, "shape.batchTitle", form.panel())) {
+                return;
+            }
+            if (form.emptyCount() < read.items().size()) {
+                break;
+            }
+            Dialogs.error(frame, messages, messages.text("shape.empty"), "");
+        }
+        boolean levels = form.autoLevels();
+        boolean inverted = form.invert();
+        BackgroundTask.Outcome<ShapeBatch.Saved> saved = BackgroundTask.run(frame, messages, "task.savingShapes",
+                () -> ShapeBatch.save(read.items(), levels, inverted, library::saveShape));
+        if (!saved.ok()) {
+            Dialogs.error(frame, messages, "error.brushSave", saved.error());
+            return;
+        }
+        ShapeBatch.Saved result = saved.value();
+        for (BrushLibrary.Stored<NamedShape> stored : result.stored()) {
+            catalog.addShape(ShapeEntry.stored(stored.file(), stored.value()));
+        }
+        if (!result.stored().isEmpty()) {
+            settings.setShape(result.stored().getLast().value().mask());
+        }
+        if (result.saveError() != null) {
+            Dialogs.error(frame, messages, "error.brushSave", result.saveError());
+        }
+        String summary = messages.text("shape.batchDone", Integer.toString(result.stored().size()));
+        if (!result.skipped().isEmpty()) {
+            summary = summary + "\n" + messages.text("shape.batchSkipped", Integer.toString(result.skipped().size()),
+                    ShapeBatch.list(messages, result.skipped()));
+        }
+        Dialogs.info(frame, messages, "shape.batchTitle", summary);
     }
 
     void deleteShape(ShapeEntry entry) {

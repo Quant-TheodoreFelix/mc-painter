@@ -6,13 +6,36 @@ import java.awt.image.DataBuffer;
 import java.awt.image.IndexColorModel;
 import java.awt.image.Raster;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.PriorityQueue;
+import space.qu4nt.thirdparty.mcpainter.anvil.internal.AtomicFiles;
 import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
 
 public final class BrushMaskImporter {
 
     public static final long MAX_FILE_BYTES = 512L * 1024 * 1024;
     public static final int MAX_DIMENSION = 16384;
+
+    private static final Comparator<Path> BY_NAME = Comparator
+            .comparing((Path p) -> p.getFileName().toString(), String.CASE_INSENSITIVE_ORDER)
+            .thenComparing(p -> p.getFileName().toString());
+
+    public record Listing(List<Path> files, int omitted) {
+
+        public Listing {
+            files = List.copyOf(files);
+            if (omitted < 0) {
+                throw new IllegalArgumentException("omitted must not be negative");
+            }
+        }
+    }
 
     private BrushMaskImporter() {
     }
@@ -88,17 +111,61 @@ public final class BrushMaskImporter {
     }
 
     public static Source read(Path file) throws IOException {
+        return read(file, BrushShape.Mask.MAX_SIZE);
+    }
+
+    public static Source read(Path file, int maxSize) throws IOException {
+        requireSize(maxSize);
         SafeImage.Decoded decoded = SafeImage.read(file, "brush image", MAX_FILE_BYTES, MAX_DIMENSION,
-                SafeImage.COMMON, BrushShape.Mask.MAX_SIZE, (width, height) -> {
+                SafeImage.COMMON, maxSize, (width, height) -> {
                 });
-        return source(decoded.image(), decoded.format(), decoded.width(), decoded.height());
+        return source(decoded.image(), decoded.format(), decoded.width(), decoded.height(), maxSize);
+    }
+
+    public static boolean imageName(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        return dot > 0 && SafeImage.COMMON.contains(fileName.substring(dot + 1).toLowerCase(Locale.ROOT));
+    }
+
+    public static Listing listImages(Path directory, int limit) throws IOException {
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be positive");
+        }
+        AtomicFiles.requireNotSymlink(directory);
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("not a directory: " + directory);
+        }
+        PriorityQueue<Path> first = new PriorityQueue<>(BY_NAME.reversed());
+        int found = 0;
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(directory)) {
+            for (Path entry : entries) {
+                Path name = entry.getFileName();
+                if (name == null || name.toString().startsWith(".") || !imageName(name.toString())
+                        || !Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
+                    continue;
+                }
+                found++;
+                first.add(entry);
+                if (first.size() > limit) {
+                    first.poll();
+                }
+            }
+        }
+        List<Path> files = new ArrayList<>(first);
+        files.sort(BY_NAME);
+        return new Listing(files, found - files.size());
     }
 
     static Source source(BufferedImage image, String format, int sourceWidth, int sourceHeight) {
+        return source(image, format, sourceWidth, sourceHeight, BrushShape.Mask.MAX_SIZE);
+    }
+
+    static Source source(BufferedImage image, String format, int sourceWidth, int sourceHeight, int maxSize) {
+        requireSize(maxSize);
         int width = image.getWidth();
         int height = image.getHeight();
         int side = Math.max(width, height);
-        int size = Math.min(side, BrushShape.Mask.MAX_SIZE);
+        int size = Math.min(side, maxSize);
         int offsetX = (side - width) / 2;
         int offsetZ = (side - height) / 2;
         int[] cellsX = new int[size];
@@ -129,6 +196,12 @@ public final class BrushMaskImporter {
             }
         }
         return new Source(size, values, coverage, format, sourceWidth, sourceHeight);
+    }
+
+    private static void requireSize(int maxSize) {
+        if (maxSize < 1 || maxSize > BrushShape.Mask.MAX_SIZE) {
+            throw new IllegalArgumentException("mask size must be in [1, " + BrushShape.Mask.MAX_SIZE + "]");
+        }
     }
 
     private static int cell(int position, int side, int size) {

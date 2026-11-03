@@ -2,12 +2,17 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.FileDialog;
 import java.awt.Frame;
+import java.io.File;
 import java.io.FilenameFilter;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileView;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.LevelData;
 import space.qu4nt.thirdparty.mcpainter.io.ProjectFile;
 
@@ -49,8 +54,34 @@ final class FileChoosers {
         return open(owner, messages.text("chooser.openBrush"), directory, "json");
     }
 
-    static Optional<Path> openShapeImage(Frame owner, Messages messages, Path directory) {
-        return open(owner, messages.text("chooser.openShapeImage"), directory, null);
+    static List<Path> openShapeImages(Frame owner, Messages messages, Path directory) {
+        FileDialog dialog = new FileDialog(owner, messages.text("chooser.openShapeImages"), FileDialog.LOAD);
+        setDirectory(dialog, directory);
+        dialog.setMultipleMode(true);
+        dialog.setVisible(true);
+        return paths(dialog.getFiles());
+    }
+
+    static Optional<Path> chooseFolder(Frame owner, String title, Path directory) {
+        if (Platform.current() == Platform.MAC) {
+            return macFolder(owner, title, directory);
+        }
+        JFileChooser chooser = new JFileChooser(directory == null ? null : directory.toFile());
+        chooser.setDialogTitle(title);
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setAcceptAllFileFilterUsed(false);
+        chooser.setMultiSelectionEnabled(false);
+        chooser.setFileView(new FileView() {
+            @Override
+            public String getName(File file) {
+                String name = file.getName();
+                return name.isEmpty() ? null : SafeText.neutralize(name);
+            }
+        });
+        if (chooser.showOpenDialog(owner) != JFileChooser.APPROVE_OPTION || chooser.getSelectedFile() == null) {
+            return Optional.empty();
+        }
+        return paths(new File[] {chooser.getSelectedFile()}).stream().findFirst();
     }
 
     static Optional<Path> saveProject(Frame owner, Messages messages, Path directory, String suggestedName) {
@@ -62,22 +93,8 @@ final class FileChoosers {
     }
 
     static Optional<Path> chooseWorld(Frame owner, Messages messages, Path directory) {
-        Platform platform = Platform.current();
-        if (platform == Platform.MAC) {
-            FileDialog dialog = new FileDialog(owner, messages.text("chooser.world"), FileDialog.LOAD);
-            setDirectory(dialog, directory);
-            String previous = System.getProperty(MAC_DIRECTORY_PROPERTY);
-            System.setProperty(MAC_DIRECTORY_PROPERTY, "true");
-            try {
-                dialog.setVisible(true);
-            } finally {
-                if (previous == null) {
-                    System.clearProperty(MAC_DIRECTORY_PROPERTY);
-                } else {
-                    System.setProperty(MAC_DIRECTORY_PROPERTY, previous);
-                }
-            }
-            return result(dialog);
+        if (Platform.current() == Platform.MAC) {
+            return macFolder(owner, messages.text("chooser.world"), directory);
         }
         FileDialog dialog = new FileDialog(owner, messages.text("chooser.worldLevelDat"), FileDialog.LOAD);
         setDirectory(dialog, directory);
@@ -152,6 +169,41 @@ final class FileChoosers {
             }
         }
         dialog.setVisible(true);
+        return result(dialog);
+    }
+
+    static List<Path> paths(File[] files) {
+        List<Path> result = new ArrayList<>();
+        if (files == null) {
+            return result;
+        }
+        for (File file : files) {
+            if (file == null) {
+                continue;
+            }
+            try {
+                result.add(file.toPath());
+            } catch (InvalidPathException ignored) {
+                continue;
+            }
+        }
+        return result;
+    }
+
+    private static Optional<Path> macFolder(Frame owner, String title, Path directory) {
+        FileDialog dialog = new FileDialog(owner, title, FileDialog.LOAD);
+        setDirectory(dialog, directory);
+        String previous = System.getProperty(MAC_DIRECTORY_PROPERTY);
+        System.setProperty(MAC_DIRECTORY_PROPERTY, "true");
+        try {
+            dialog.setVisible(true);
+        } finally {
+            if (previous == null) {
+                System.clearProperty(MAC_DIRECTORY_PROPERTY);
+            } else {
+                System.setProperty(MAC_DIRECTORY_PROPERTY, previous);
+            }
+        }
         return result(dialog);
     }
 

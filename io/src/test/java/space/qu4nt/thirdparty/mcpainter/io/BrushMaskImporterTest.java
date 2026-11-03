@@ -15,6 +15,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
@@ -176,5 +177,41 @@ class BrushMaskImporterTest {
         crc.update(chunk);
         out.writeInt((int) crc.getValue());
         return bytes.toByteArray();
+    }
+
+    @Test
+    void readsSmallPreviewsOfLargeImages() throws IOException {
+        Path file = write(rgb(1000, 500, 0xFFFFFF), "png", "wide.png");
+        BrushMaskImporter.Source preview = BrushMaskImporter.read(file, 64);
+        assertEquals(64, preview.size());
+        assertEquals(1000, preview.sourceWidth());
+        assertEquals(255, preview.toMask(false, false).value(32, 32));
+        assertThrows(IllegalArgumentException.class, () -> BrushMaskImporter.read(file, 0));
+        assertThrows(IllegalArgumentException.class, () -> BrushMaskImporter.read(file, BrushShape.Mask.MAX_SIZE + 1));
+    }
+
+    @Test
+    void listsImageFilesOfAFolderInNameOrder() throws IOException {
+        Path folder = Files.createDirectory(dir.resolve("shapes"));
+        for (String name : List.of("b.PNG", "a.png", "C.jpg", "d.tiff", ".hidden.png", "notes.txt", "noext")) {
+            Files.write(folder.resolve(name), new byte[] {1});
+        }
+        Files.createDirectory(folder.resolve("nested.png"));
+        Files.createSymbolicLink(folder.resolve("link.png"), folder.resolve("a.png"));
+
+        BrushMaskImporter.Listing all = BrushMaskImporter.listImages(folder, 10);
+        assertEquals(List.of("a.png", "b.PNG", "C.jpg", "d.tiff"),
+                all.files().stream().map(p -> p.getFileName().toString()).toList());
+        assertEquals(0, all.omitted());
+
+        BrushMaskImporter.Listing limited = BrushMaskImporter.listImages(folder, 2);
+        assertEquals(List.of("a.png", "b.PNG"),
+                limited.files().stream().map(p -> p.getFileName().toString()).toList());
+        assertEquals(2, limited.omitted());
+
+        assertThrows(IllegalArgumentException.class, () -> BrushMaskImporter.listImages(folder, 0));
+        assertThrows(IOException.class, () -> BrushMaskImporter.listImages(folder.resolve("a.png"), 10));
+        Path linked = Files.createSymbolicLink(dir.resolve("linked"), folder);
+        assertThrows(IOException.class, () -> BrushMaskImporter.listImages(linked, 10));
     }
 }

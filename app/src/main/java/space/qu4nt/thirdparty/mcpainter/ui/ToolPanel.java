@@ -18,7 +18,9 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.JToggleButton;
@@ -111,7 +113,14 @@ final class ToolPanel {
         });
         JButton addShape = SafeText.plain(new JButton(messages.text("shape.add")));
         addShape.setFocusable(false);
-        addShape.addActionListener(e -> actions.addShape());
+        JPopupMenu addMenu = new JPopupMenu();
+        JMenuItem addFiles = SafeText.plain(new JMenuItem(messages.text("shape.addFiles")));
+        addFiles.addActionListener(e -> actions.addShapeFiles());
+        JMenuItem addFolder = SafeText.plain(new JMenuItem(messages.text("shape.addFolder")));
+        addFolder.addActionListener(e -> actions.addShapeFolder());
+        addMenu.add(addFiles);
+        addMenu.add(addFolder);
+        addShape.addActionListener(e -> addMenu.show(addShape, 0, addShape.getHeight()));
         deleteShape = SafeText.plain(new JButton(messages.text("shape.delete")));
         deleteShape.setFocusable(false);
         deleteShape.addActionListener(e -> {
