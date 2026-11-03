@@ -27,6 +27,10 @@ public final class AtomicFiles {
     }
 
     public static void write(Path target, ChannelWriter writer) throws IOException {
+        write(target, writer, true);
+    }
+
+    public static void write(Path target, ChannelWriter writer, boolean durable) throws IOException {
         Path absolute = target.toAbsolutePath();
         Path directory = absolute.getParent();
         if (directory == null) {
@@ -39,12 +43,16 @@ public final class AtomicFiles {
             try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE,
                     StandardOpenOption.TRUNCATE_EXISTING, LinkOption.NOFOLLOW_LINKS)) {
                 writer.write(channel);
-                channel.force(true);
+                if (durable) {
+                    channel.force(true);
+                }
             }
             copyPermissions(absolute, temp);
             Files.move(temp, absolute, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             moved = true;
-            syncDirectory(directory);
+            if (durable) {
+                syncDirectory(directory);
+            }
         } finally {
             if (!moved) {
                 Files.deleteIfExists(temp);

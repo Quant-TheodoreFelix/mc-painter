@@ -2,6 +2,7 @@ package space.qu4nt.thirdparty.mcpainter.io;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayOutputStream;
@@ -27,13 +28,17 @@ import space.qu4nt.thirdparty.mcpainter.nbt.Tag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.BaseTerrain;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
+import space.qu4nt.thirdparty.mcpainter.world.TileRect;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 class ProjectFileTest {
+
+    private static final int LEGACY_VERSION = 3;
 
     @TempDir
     Path dir;
@@ -65,7 +70,8 @@ class ProjectFileTest {
         assertEquals(original.minY(), loaded.minY());
         assertEquals(original.maxY(), loaded.maxY());
         assertEquals(original.seaLevel(), loaded.seaLevel());
-        assertEquals(original.maxTiles(), loaded.maxTiles());
+        assertEquals(original.bounds(), loaded.bounds());
+        assertEquals(original.base(), loaded.base());
         assertEquals(new GenerationSettings(-1234567890123L, true), loaded.generation());
         assertEquals(original.biomes(), loaded.biomes());
         assertEquals(original.tilePositions(), loaded.tilePositions());
@@ -298,7 +304,7 @@ class ProjectFileTest {
     }
 
     private static byte[] container(byte[]... records) throws IOException {
-        return container(ProjectFile.FORMAT_VERSION, records);
+        return container(LEGACY_VERSION, records);
     }
 
     private static byte[] container(int version, byte[]... records) throws IOException {
@@ -310,5 +316,69 @@ class ProjectFileTest {
             out.write(record);
         }
         return bytes.toByteArray();
+    }
+
+    @Test
+    void flatWorldsStoreOnlyEditedTilesWithTheirBounds() throws IOException {
+        TileRect bounds = new TileRect(-3, -3, 3, 3);
+        WorldModel.Builder builder = WorldModel.builder(-64, 320, 63).bounds(bounds)
+                .base(BaseTerrain.flat(70.5f, TerrainType.SAND)).generation(new GenerationSettings(5, false));
+        for (int x = -1; x <= 1; x++) {
+            builder.baseTile(new TilePos(x, 0));
+        }
+        WorldModel model = builder.build();
+        try (Edit edit = model.beginEdit("paint")) {
+            edit.setHeight(5, 5, 99);
+        }
+        Path file = dir.resolve("flat" + ProjectFile.EXTENSION);
+        ProjectFile.save(model, file);
+        WorldModel loaded = ProjectFile.load(file);
+        assertEquals(bounds, loaded.bounds());
+        assertEquals(BaseTerrain.flat(70.5f, TerrainType.SAND), loaded.base());
+        assertEquals(java.util.List.of(new TilePos(0, 0)), loaded.tilePositions());
+        assertEquals(99f, loaded.height(5, 5));
+
+        assertRejected(container(ProjectFile.FORMAT_VERSION, record(ProjectFile.RECORD_HEADER, header(5)), end()));
+    }
+
+    @Test
+    void unpacksIntoAWorkspaceAndSavesItBack() throws IOException {
+        Path file = dir.resolve("world" + ProjectFile.EXTENSION);
+        ProjectFile.save(sample(), file);
+        Path root = dir.resolve("workspaces");
+        java.util.List<Long> reports = new java.util.ArrayList<>();
+        try (Workspace workspace = ProjectFile.unpack(file, root, "sample", (model, pos) -> new int[64],
+                (done, total) -> reports.add(done))) {
+            assertEquals(2, workspace.tileCount());
+            assertEquals(2, workspace.pendingCount());
+            assertEquals(new GenerationSettings(-1234567890123L, true), workspace.spec().generation());
+            assertFalse(reports.isEmpty());
+            Path again = dir.resolve("again" + ProjectFile.EXTENSION);
+            ProjectFile.save(workspace, again, (done, total) -> true);
+            WorldModel loaded = ProjectFile.load(again);
+            assertEquals(sample().tilePositions(), loaded.tilePositions());
+            assertEquals(123.25f, loaded.height(-5, 7));
+            assertEquals(200, loaded.layer(-5, 7, Layer.OAK_TREES));
+        }
+        assertEquals(1, Workspace.list(root).size());
+
+        byte[] broken = container(ProjectFile.FORMAT_VERSION, record(ProjectFile.RECORD_HEADER, v4Header()),
+                record(ProjectFile.RECORD_TILE, tile(0, 0, 0, Float.floatToIntBits(70))),
+                record(ProjectFile.RECORD_TILE, tile(0, 0, 0, Float.floatToIntBits(70))), end());
+        Path bad = Files.write(dir.resolve("dup" + ProjectFile.EXTENSION), broken);
+        Path badRoot = dir.resolve("bad");
+        assertThrows(ProjectFormatException.class,
+                () -> ProjectFile.unpack(bad, badRoot, "x", (model, pos) -> new int[64], (done, total) -> true));
+        assertEquals(0, Workspace.list(badRoot).size());
+    }
+
+    private static CompoundTag v4Header() {
+        CompoundTag.Builder builder = CompoundTag.builder();
+        header(5).entries().forEach(builder::put);
+        return builder.put("bounds", IntArrayTag.of(new int[] {-2, -2, 2, 2}))
+                .put("base", new StringTag("void"))
+                .put("baseHeight", new space.qu4nt.thirdparty.mcpainter.nbt.FloatTag(0))
+                .put("baseTerrain", new StringTag("grass"))
+                .build();
     }
 }
