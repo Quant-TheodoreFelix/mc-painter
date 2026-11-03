@@ -24,15 +24,18 @@ public final class WorldModel {
     private final List<String> biomes;
     private final Map<TilePos, Tile> tiles;
     private final EditHistory history = new EditHistory();
+    private GenerationSettings generation;
     private Edit activeEdit;
 
-    private WorldModel(int minY, int maxY, int seaLevel, int maxTiles, List<String> biomes, Map<TilePos, Tile> tiles) {
+    private WorldModel(int minY, int maxY, int seaLevel, int maxTiles, List<String> biomes, Map<TilePos, Tile> tiles,
+            GenerationSettings generation) {
         this.minY = minY;
         this.maxY = maxY;
         this.seaLevel = seaLevel;
         this.maxTiles = maxTiles;
         this.biomes = biomes;
         this.tiles = tiles;
+        this.generation = generation;
     }
 
     public static WorldModel create(int minY, int maxY, int seaLevel) {
@@ -57,6 +60,10 @@ public final class WorldModel {
 
     public int maxTiles() {
         return maxTiles;
+    }
+
+    public GenerationSettings generation() {
+        return generation;
     }
 
     public List<String> biomes() {
@@ -145,12 +152,12 @@ public final class WorldModel {
 
     public boolean undo() {
         requireNoActiveEdit();
-        return history.undo(tiles);
+        return history.undo(this);
     }
 
     public boolean redo() {
         requireNoActiveEdit();
-        return history.redo(tiles);
+        return history.redo(this);
     }
 
     float clampHeight(float value) {
@@ -179,6 +186,10 @@ public final class WorldModel {
 
     Map<TilePos, Tile> tilesForEdit() {
         return tiles;
+    }
+
+    void assignGeneration(GenerationSettings value) {
+        generation = Objects.requireNonNull(value, "generation");
     }
 
     void finishEdit(Edit edit, EditHistory.Step step) {
@@ -228,6 +239,7 @@ public final class WorldModel {
         private int maxTiles = DEFAULT_MAX_TILES;
         private final List<String> biomes = new ArrayList<>(List.of(DEFAULT_BIOME));
         private final Map<TilePos, Tile> tiles = new HashMap<>();
+        private GenerationSettings generation = GenerationSettings.DEFAULT;
 
         private Builder(int minY, int maxY, int seaLevel) {
             if (minY >= maxY || minY % 16 != 0 || maxY % 16 != 0) {
@@ -246,6 +258,11 @@ public final class WorldModel {
                 throw new IllegalArgumentException("maxTiles must be positive");
             }
             maxTiles = value;
+            return this;
+        }
+
+        public Builder generation(GenerationSettings value) {
+            generation = Objects.requireNonNull(value, "generation");
             return this;
         }
 
@@ -300,7 +317,8 @@ public final class WorldModel {
                     }
                 }
             }
-            return new WorldModel(minY, maxY, seaLevel, maxTiles, new ArrayList<>(biomes), new HashMap<>(tiles));
+            return new WorldModel(minY, maxY, seaLevel, maxTiles, new ArrayList<>(biomes), new HashMap<>(tiles),
+                    generation);
         }
     }
 }

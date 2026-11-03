@@ -5,6 +5,8 @@ import java.awt.image.IndexColorModel;
 import java.awt.image.Raster;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Objects;
+import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -35,6 +37,11 @@ public final class HeightmapImporter {
     }
 
     public static WorldModel importPng(Path file, Options options) throws IOException {
+        return importPng(file, options, GenerationSettings.DEFAULT);
+    }
+
+    public static WorldModel importPng(Path file, Options options, GenerationSettings generation) throws IOException {
+        Objects.requireNonNull(generation, "generation");
         BufferedImage image = SafeImage.read(file, "heightmap", MAX_FILE_BYTES, MAX_DIMENSION, SafeImage.PNG, 0,
                 (width, height) -> {
                     long tiles = (long) ceilDiv(width, Tile.SIZE) * ceilDiv(height, Tile.SIZE);
@@ -42,7 +49,7 @@ public final class HeightmapImporter {
                         throw new IOException("heightmap needs " + tiles + " tiles, limit " + options.maxTiles());
                     }
                 }).image();
-        return buildModel(toFractions(image), options);
+        return buildModel(toFractions(image), options, generation);
     }
 
     private static float[][] toFractions(BufferedImage image) {
@@ -62,7 +69,7 @@ public final class HeightmapImporter {
         return fractions;
     }
 
-    private static WorldModel buildModel(float[][] fractions, Options options) {
+    private static WorldModel buildModel(float[][] fractions, Options options, GenerationSettings generation) {
         int height = fractions.length;
         int width = fractions[0].length;
         int tilesX = ceilDiv(width, Tile.SIZE);
@@ -70,7 +77,7 @@ public final class HeightmapImporter {
         int firstTileX = -(tilesX / 2);
         int firstTileZ = -(tilesZ / 2);
         WorldModel.Builder builder = WorldModel.builder(options.minY(), options.maxY(), options.seaLevel())
-                .maxTiles(options.maxTiles());
+                .maxTiles(options.maxTiles()).generation(generation);
         float range = options.high() - options.low();
         float snowLine = options.low() + range * 0.9f;
         for (int tz = 0; tz < tilesZ; tz++) {

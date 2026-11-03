@@ -17,12 +17,14 @@ import space.qu4nt.thirdparty.mcpainter.nbt.CompoundTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntArrayTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.ListTag;
+import space.qu4nt.thirdparty.mcpainter.nbt.LongTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtCompression;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtIo;
 import space.qu4nt.thirdparty.mcpainter.nbt.RootTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.StringTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
+import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -34,7 +36,8 @@ class ProjectFileTest {
     Path dir;
 
     private static WorldModel sample() {
-        WorldModel model = WorldModel.builder(-64, 320, 63).maxTiles(10).build();
+        WorldModel model = WorldModel.builder(-64, 320, 63).maxTiles(10)
+                .generation(new GenerationSettings(-1234567890123L)).build();
         try (Edit edit = model.beginEdit("setup")) {
             edit.addTile(new TilePos(-1, 0), 70, TerrainType.GRASS);
             edit.addTile(new TilePos(3, -2), 40, TerrainType.SAND);
@@ -58,6 +61,7 @@ class ProjectFileTest {
         assertEquals(original.maxY(), loaded.maxY());
         assertEquals(original.seaLevel(), loaded.seaLevel());
         assertEquals(original.maxTiles(), loaded.maxTiles());
+        assertEquals(-1234567890123L, loaded.generation().seed());
         assertEquals(original.biomes(), loaded.biomes());
         assertEquals(original.tilePositions(), loaded.tilePositions());
         for (TilePos pos : original.tilePositions()) {
@@ -123,10 +127,24 @@ class ProjectFileTest {
         assertRejected(container(record(ProjectFile.RECORD_HEADER, header(5)), record(9, header(5)), end()));
         assertRejected(container(record(ProjectFile.RECORD_HEADER, header(ProjectFile.HARD_MAX_TILES + 1)), end()));
         assertRejected(container(record(ProjectFile.RECORD_HEADER, header(5))));
+        assertRejected(container(ProjectFile.FORMAT_VERSION, record(ProjectFile.RECORD_HEADER, header(5, null)),
+                record(ProjectFile.RECORD_TILE, tile(0, 0, 0, Float.floatToIntBits(70))), end()));
         byte[] valid = container(record(ProjectFile.RECORD_HEADER, header(5)),
                 record(ProjectFile.RECORD_TILE, tile(0, 0, 0, Float.floatToIntBits(70))), end());
         Path file = Files.write(dir.resolve("ok" + ProjectFile.EXTENSION), valid);
         assertEquals(70f, ProjectFile.load(file).height(5, 5));
+        assertEquals(99, ProjectFile.load(file).generation().seed());
+    }
+
+    @Test
+    void readsVersionOneFiles() throws IOException {
+        byte[] v1 = container(1, record(ProjectFile.RECORD_HEADER, header(5, null)),
+                record(ProjectFile.RECORD_TILE, tile(0, 0, 0, Float.floatToIntBits(70))), end());
+        WorldModel loaded = ProjectFile.load(Files.write(dir.resolve("v1" + ProjectFile.EXTENSION), v1));
+        assertEquals(70f, loaded.height(5, 5));
+        assertEquals(GenerationSettings.DEFAULT, loaded.generation());
+        assertRejected(container(0, record(ProjectFile.RECORD_HEADER, header(5)), end()));
+        assertRejected(container(ProjectFile.FORMAT_VERSION + 1, record(ProjectFile.RECORD_HEADER, header(5)), end()));
     }
 
     @Test
@@ -144,14 +162,21 @@ class ProjectFileTest {
     }
 
     private static CompoundTag header(int maxTiles) {
-        return CompoundTag.builder()
+        return header(maxTiles, 99L);
+    }
+
+    private static CompoundTag header(int maxTiles, Long seed) {
+        CompoundTag.Builder builder = CompoundTag.builder()
                 .put("minY", new IntTag(-64))
                 .put("maxY", new IntTag(320))
                 .put("seaLevel", new IntTag(63))
                 .put("maxTiles", new IntTag(maxTiles))
                 .put("terrainTypes", ListTag.of(TagType.STRING, new StringTag("grass")))
-                .put("biomes", ListTag.of(TagType.STRING, new StringTag("minecraft:plains")))
-                .build();
+                .put("biomes", ListTag.of(TagType.STRING, new StringTag("minecraft:plains")));
+        if (seed != null) {
+            builder.put("seed", new LongTag(seed));
+        }
+        return builder.build();
     }
 
     private static CompoundTag tile(int x, int z, int terrainIndex, int heightBits) {
@@ -187,10 +212,14 @@ class ProjectFileTest {
     }
 
     private static byte[] container(byte[]... records) throws IOException {
+        return container(ProjectFile.FORMAT_VERSION, records);
+    }
+
+    private static byte[] container(int version, byte[]... records) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bytes);
         out.write(ProjectFile.MAGIC);
-        out.writeShort(ProjectFile.FORMAT_VERSION);
+        out.writeShort(version);
         for (byte[] record : records) {
             out.write(record);
         }

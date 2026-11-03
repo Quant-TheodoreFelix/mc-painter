@@ -11,6 +11,7 @@ public final class Edit implements AutoCloseable {
     private final WorldModel model;
     private final String label;
     private final Map<TilePos, Tile> before = new HashMap<>();
+    private GenerationSettings generationBefore;
     private boolean closed;
 
     Edit(WorldModel model, String label) {
@@ -40,6 +41,15 @@ public final class Edit implements AutoCloseable {
         }
         tiles.put(pos, Tile.filled(model.clampHeight(height), terrain, model.seaLevel(), 0));
         return true;
+    }
+
+    public void setGeneration(GenerationSettings settings) {
+        requireOpen();
+        Objects.requireNonNull(settings, "settings");
+        if (generationBefore == null) {
+            generationBefore = model.generation();
+        }
+        model.assignGeneration(settings);
     }
 
     public boolean removeTile(TilePos pos) {
@@ -129,6 +139,10 @@ public final class Edit implements AutoCloseable {
                 entries.remove();
             }
         }
-        model.finishEdit(this, before.isEmpty() ? null : new EditHistory.Step(label, Collections.unmodifiableMap(new HashMap<>(before))));
+        GenerationSettings changedFrom = generationBefore != null && !generationBefore.equals(model.generation())
+                ? generationBefore : null;
+        EditHistory.Step step = before.isEmpty() && changedFrom == null ? null
+                : new EditHistory.Step(label, Collections.unmodifiableMap(new HashMap<>(before)), changedFrom);
+        model.finishEdit(this, step);
     }
 }

@@ -25,6 +25,7 @@ import space.qu4nt.thirdparty.mcpainter.nbt.CompoundTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntArrayTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.ListTag;
+import space.qu4nt.thirdparty.mcpainter.nbt.LongTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtCompression;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtFormatException;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtIo;
@@ -34,6 +35,7 @@ import space.qu4nt.thirdparty.mcpainter.nbt.RootTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.StringTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.Tag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
+import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -42,7 +44,8 @@ import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 public final class ProjectFile {
 
     public static final String EXTENSION = ".mcpaint";
-    public static final int FORMAT_VERSION = 1;
+    public static final int FORMAT_VERSION = 2;
+    public static final int MIN_FORMAT_VERSION = 1;
     public static final int HARD_MAX_TILES = 65536;
 
     static final byte[] MAGIC = {'M', 'C', 'P', 'A', 'I', 'N', 'T', 'R'};
@@ -86,7 +89,7 @@ public final class ProjectFile {
                 throw new ProjectFormatException("not an mc-painter project file");
             }
             int version = in.readUnsignedShort();
-            if (version != FORMAT_VERSION) {
+            if (version < MIN_FORMAT_VERSION || version > FORMAT_VERSION) {
                 throw new ProjectFormatException("unsupported project format version " + version);
             }
             remaining -= MAGIC.length + Short.BYTES;
@@ -122,7 +125,7 @@ public final class ProjectFile {
                         throw new ProjectFormatException("maxTiles out of range: " + maxTiles);
                     }
                     terrainTypes = terrainTypes(header);
-                    builder = newBuilder(header, maxTiles);
+                    builder = newBuilder(header, maxTiles, version);
                 } else if (type == RECORD_TILE) {
                     if (builder == null) {
                         throw new ProjectFormatException("tile record before header");
@@ -156,6 +159,7 @@ public final class ProjectFile {
                 .put("maxTiles", new IntTag(model.maxTiles()))
                 .put("terrainTypes", ListTag.of(TagType.STRING, terrain))
                 .put("biomes", ListTag.of(TagType.STRING, biomes))
+                .put("seed", new LongTag(model.generation().seed()))
                 .build();
     }
 
@@ -183,14 +187,20 @@ public final class ProjectFile {
                 .build();
     }
 
-    private static WorldModel.Builder newBuilder(CompoundTag header, int maxTiles) throws ProjectFormatException {
+    private static WorldModel.Builder newBuilder(CompoundTag header, int maxTiles, int version)
+            throws ProjectFormatException {
+        GenerationSettings generation = GenerationSettings.DEFAULT;
+        if (version >= 2) {
+            generation = new GenerationSettings(header.get("seed", LongTag.class)
+                    .orElseThrow(() -> new ProjectFormatException("missing long seed")).value());
+        }
         List<String> biomes = new ArrayList<>();
         for (Tag tag : requireList(header, "biomes")) {
             biomes.add(((StringTag) tag).value());
         }
         try {
             return WorldModel.builder(requireInt(header, "minY"), requireInt(header, "maxY"),
-                    requireInt(header, "seaLevel")).maxTiles(maxTiles).biomes(biomes);
+                    requireInt(header, "seaLevel")).maxTiles(maxTiles).biomes(biomes).generation(generation);
         } catch (IllegalArgumentException e) {
             throw new ProjectFormatException("invalid project header: " + e.getMessage(), e);
         }

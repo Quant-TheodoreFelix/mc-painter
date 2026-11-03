@@ -198,6 +198,35 @@ class WorldModelTest {
     }
 
     @Test
+    void seedChangesAreUndoable() {
+        WorldModel model = WorldModel.builder(-64, 320, 62).generation(new GenerationSettings(42)).build();
+        assertEquals(42, model.generation().seed());
+        assertEquals(0, WorldModel.create(-64, 320, 62).generation().seed());
+        long start = model.revision();
+        try (Edit edit = model.beginEdit("same")) {
+            edit.setGeneration(new GenerationSettings(42));
+        }
+        assertEquals(start, model.revision());
+        assertFalse(model.canUndo());
+        try (Edit edit = model.beginEdit("seed")) {
+            edit.setGeneration(model.generation().withSeed(7));
+            edit.setGeneration(model.generation().withSeed(-9));
+        }
+        assertEquals(-9, model.generation().seed());
+        assertTrue(model.revision() != start);
+        assertTrue(model.undo());
+        assertEquals(42, model.generation().seed());
+        assertEquals(start, model.revision());
+        assertTrue(model.redo());
+        assertEquals(-9, model.generation().seed());
+        try (Edit edit = model.beginEdit("tiles")) {
+            edit.addTile(new TilePos(0, 0), 64, TerrainType.GRASS);
+        }
+        model.undo();
+        assertEquals(-9, model.generation().seed());
+    }
+
+    @Test
     void onlyOneEditAtATime() {
         WorldModel model = twoTiles();
         Edit first = model.beginEdit("first");

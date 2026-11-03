@@ -11,10 +11,11 @@ final class EditHistory {
     static final int MAX_STEPS = 100;
     static final long MAX_BYTES = 512L * 1024 * 1024;
 
-    record Step(String label, Map<TilePos, Tile> before, long fromRevision, long toRevision) {
+    record Step(String label, Map<TilePos, Tile> before, GenerationSettings generation, long fromRevision,
+            long toRevision) {
 
-        Step(String label, Map<TilePos, Tile> before) {
-            this(label, before, 0, 0);
+        Step(String label, Map<TilePos, Tile> before, GenerationSettings generation) {
+            this(label, before, generation, 0, 0);
         }
 
         long estimatedBytes() {
@@ -33,7 +34,7 @@ final class EditHistory {
     }
 
     void push(Step unstamped) {
-        Step step = new Step(unstamped.label(), unstamped.before(), revision, ++lastRevision);
+        Step step = new Step(unstamped.label(), unstamped.before(), unstamped.generation(), revision, ++lastRevision);
         revision = step.toRevision();
         undo.push(step);
         undoBytes += step.estimatedBytes();
@@ -55,30 +56,31 @@ final class EditHistory {
         return Optional.ofNullable(undo.peek()).map(Step::label);
     }
 
-    boolean undo(Map<TilePos, Tile> tiles) {
+    boolean undo(WorldModel model) {
         Step step = undo.poll();
         if (step == null) {
             return false;
         }
         undoBytes -= step.estimatedBytes();
-        redo.push(swap(step, tiles));
+        redo.push(swap(step, model));
         revision = step.fromRevision();
         return true;
     }
 
-    boolean redo(Map<TilePos, Tile> tiles) {
+    boolean redo(WorldModel model) {
         Step step = redo.poll();
         if (step == null) {
             return false;
         }
-        Step inverse = swap(step, tiles);
+        Step inverse = swap(step, model);
         undo.push(inverse);
         undoBytes += inverse.estimatedBytes();
         revision = step.toRevision();
         return true;
     }
 
-    private static Step swap(Step step, Map<TilePos, Tile> tiles) {
+    private static Step swap(Step step, WorldModel model) {
+        Map<TilePos, Tile> tiles = model.tilesForEdit();
         Map<TilePos, Tile> current = new HashMap<>();
         for (Map.Entry<TilePos, Tile> entry : step.before().entrySet()) {
             current.put(entry.getKey(), tiles.get(entry.getKey()));
@@ -88,6 +90,11 @@ final class EditHistory {
                 tiles.put(entry.getKey(), entry.getValue());
             }
         }
-        return new Step(step.label(), current, step.fromRevision(), step.toRevision());
+        GenerationSettings generation = null;
+        if (step.generation() != null) {
+            generation = model.generation();
+            model.assignGeneration(step.generation());
+        }
+        return new Step(step.label(), current, generation, step.fromRevision(), step.toRevision());
     }
 }
