@@ -156,6 +156,10 @@ public final class WorldModel {
         return positions;
     }
 
+    public void forEachTile(java.util.function.BiConsumer<TilePos, Tile> action) {
+        tiles.forEach(action);
+    }
+
     public Optional<Tile> tile(TilePos pos) {
         return Optional.ofNullable(tiles.get(pos));
     }

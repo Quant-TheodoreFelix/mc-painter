@@ -71,8 +71,9 @@ final class MapView {
     private static final Color ADD_EDGE = new Color(255, 255, 255, 200);
     private static final Color DELETE_PREVIEW = new Color(235, 35, 35, 130);
     private static final Color DELETE_EDGE = new Color(255, 40, 40, 230);
-    private static final int GRID_MIN_PIXELS = 12;
-    static final int DETAIL_TILE_PIXELS = 8;
+    static final int GRID_MIN_PIXELS = 12;
+    static final int DETAIL_TILE_PIXELS = 16;
+    static final int TILE_GRID_PIXELS = 32;
     static final int EDGE_PIXELS = 6;
     private static final Color OUTSIDE_AREA = new Color(0, 0, 0, 120);
     private static final Color NO_AREA = new Color(0, 0, 0, 60);
@@ -662,11 +663,15 @@ final class MapView {
         Optional<Workspace> workspace = document.workspace();
         double scale = viewport.scale();
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        if (workspace.isPresent() && Tile.SIZE * scale < DETAIL_TILE_PIXELS) {
+        Optional<TileRect> gridArea = showGrid ? gridRect(workspace, model) : Optional.empty();
+        if (workspace.isPresent() && (areaMode || Tile.SIZE * scale < DETAIL_TILE_PIXELS)) {
+            OverviewRenderer.Grid grid = gridArea.map(rect -> new OverviewRenderer.Grid(rect, chunkLine.getRGB(),
+                    tileLine.getRGB(), (long) gridStepTiles(scale) * Tile.SIZE)).orElse(null);
             g.drawImage(overview.render(viewport, width, height, model, workspace.get(),
-                    BACKGROUND.getRGB() & 0xFFFFFF, dataVersion), 0, 0, null);
+                    BACKGROUND.getRGB() & 0xFFFFFF, dataVersion, grid), 0, 0, null);
         } else {
             paintTiles(g, clip, model, workspace);
+            gridArea.ifPresent(rect -> paintGrid(g, rect, width, height));
         }
         if (workspace.isPresent()) {
             paintBounds(g, workspace.get(), width, height);
@@ -691,8 +696,6 @@ final class MapView {
         int maxTileZ = tileIndex(viewport.worldZ(clip.y + clip.height));
         Tool active = stroke != null ? stroke.tool() : settings.tool();
         List<Layer> overlay = active.paintsLayer() ? settings.paintLayers() : List.of();
-        boolean chunkGrid = showGrid && chunkLine.getAlpha() > 0 && 16 * scale >= GRID_MIN_PIXELS;
-        boolean tileGrid = showGrid && tileLine.getAlpha() > 0 && Tile.SIZE * scale >= GRID_MIN_PIXELS;
         TileRect bounds = workspace.map(w -> w.spec().bounds()).orElse(TileRect.WORLD);
         if (workspace.isPresent()) {
             int base = Session.baseColor(workspace.get().spec());
@@ -730,20 +733,60 @@ final class MapView {
                 Optional<SurfacePreview.Surface> surface = preview ? previews.surface(pos) : Optional.empty();
                 g.drawImage(cache.image(model, pos, lod, overlay, surface.orElse(null)), x0, z0, x1 - x0, z1 - z0,
                         null);
-                if (chunkGrid) {
-                    g.setColor(chunkLine);
-                    for (int offset = 16; offset < Tile.SIZE; offset += 16) {
-                        int cx = screenX(pos.minBlockX() + offset);
-                        int cz = screenZ(pos.minBlockZ() + offset);
-                        g.drawLine(cx, z0, cx, z1 - 1);
-                        g.drawLine(x0, cz, x1 - 1, cz);
-                    }
-                }
-                if (tileGrid) {
-                    g.setColor(tileLine);
-                    g.drawRect(x0, z0, x1 - x0 - 1, z1 - z0 - 1);
-                }
             }
+        }
+    }
+
+    static int gridStepTiles(double scale) {
+        int step = 1;
+        while (step < (1 << 20) && step * Tile.SIZE * scale < TILE_GRID_PIXELS) {
+            step <<= 1;
+        }
+        return step;
+    }
+
+    private Optional<TileRect> gridRect(Optional<Workspace> workspace, WorldModel model) {
+        if (workspace.isPresent() && workspace.get().spec().base().filled()) {
+            return Optional.of(workspace.get().spec().bounds());
+        }
+        int[] box = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
+        model.forEachTile((pos, tile) -> {
+            box[0] = Math.min(box[0], pos.x());
+            box[1] = Math.min(box[1], pos.z());
+            box[2] = Math.max(box[2], pos.x());
+            box[3] = Math.max(box[3], pos.z());
+        });
+        return box[0] > box[2] ? Optional.empty() : Optional.of(new TileRect(box[0], box[1], box[2], box[3]));
+    }
+
+    private void paintGrid(Graphics2D g, TileRect rect, int width, int height) {
+        double scale = viewport.scale();
+        Rectangle area = screenRect(rect).intersection(new Rectangle(0, 0, width, height));
+        if (area.isEmpty()) {
+            return;
+        }
+        if (chunkLine.getAlpha() > 0 && 16 * scale >= GRID_MIN_PIXELS) {
+            g.setColor(chunkLine);
+            gridLines(g, area, 16);
+        }
+        if (tileLine.getAlpha() > 0) {
+            g.setColor(tileLine);
+            gridLines(g, area, (long) gridStepTiles(scale) * Tile.SIZE);
+        }
+    }
+
+    private void gridLines(Graphics2D g, Rectangle area, long spacing) {
+        double left = viewport.worldX(area.x);
+        double right = viewport.worldX(area.x + area.width);
+        double top = viewport.worldZ(area.y);
+        double bottom = viewport.worldZ(area.y + area.height);
+        for (long x = Math.ceilDiv((long) Math.floor(left), spacing) * spacing; x <= right; x += spacing) {
+            int sx = (int) Math.floor(viewport.screenX(x));
+            g.drawLine(sx, area.y, sx, area.y + area.height - 1);
+        }
+        for (long z = Math.ceilDiv((long) Math.floor(top), spacing) * spacing; z <= bottom; z += spacing) {
+            int sz = (int) Math.floor(viewport.screenZ(z));
+            g.drawLine(area.x, sz, area.x + area.width - 1, sz);
         }
     }
 
