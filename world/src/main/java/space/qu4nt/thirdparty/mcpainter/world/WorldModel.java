@@ -122,6 +122,10 @@ public final class WorldModel {
         return biomes.get(biomeIndex(x, z));
     }
 
+    public int layer(int x, int z, Layer layer) {
+        return requireTile(x, z).layer(layer, localIndex(x, z));
+    }
+
     public int biomeIndex(int x, int z) {
         return requireTile(x, z).biomeIndex(localIndex(x, z));
     }
@@ -307,6 +311,27 @@ public final class WorldModel {
             }
             tiles.put(pos, tile);
             return this;
+        }
+
+        public Builder layer(TilePos pos, Layer layer, byte[] values) {
+            requireBuilt(pos).loadLayer(Objects.requireNonNull(layer, "layer"), values);
+            return this;
+        }
+
+        public Builder layerFill(TilePos pos, Layer layer, int value) {
+            if (value < 0 || value > Layer.MAX_VALUE) {
+                throw new IllegalArgumentException("layer value out of range");
+            }
+            requireBuilt(pos).fillLayer(Objects.requireNonNull(layer, "layer"), value);
+            return this;
+        }
+
+        private Tile requireBuilt(TilePos pos) {
+            Tile tile = tiles.get(Objects.requireNonNull(pos, "pos"));
+            if (tile == null) {
+                throw new IllegalArgumentException("no tile " + pos);
+            }
+            return tile;
         }
 
         public WorldModel build() {

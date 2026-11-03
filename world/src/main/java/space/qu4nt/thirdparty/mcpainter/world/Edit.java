@@ -39,7 +39,15 @@ public final class Edit implements AutoCloseable {
         if (!before.containsKey(pos)) {
             before.put(pos, null);
         }
-        tiles.put(pos, Tile.filled(model.clampHeight(height), terrain, model.seaLevel(), 0));
+        Tile tile = Tile.filled(model.clampHeight(height), terrain, model.seaLevel(), 0);
+        if (model.generation().initialOres()) {
+            for (Layer layer : Layer.values()) {
+                if (layer.ore()) {
+                    tile.fillLayer(layer, Layer.INITIAL_ORE_VALUE);
+                }
+            }
+        }
+        tiles.put(pos, tile);
         return true;
     }
 
@@ -94,6 +102,26 @@ public final class Edit implements AutoCloseable {
         return true;
     }
 
+    public boolean setLayer(int x, int z, Layer layer, int value) {
+        Objects.requireNonNull(layer, "layer");
+        Tile tile = writable(x, z);
+        if (tile == null) {
+            return false;
+        }
+        tile.setLayer(layer, WorldModel.localIndex(x, z), Math.clamp(value, 0, Layer.MAX_VALUE));
+        return true;
+    }
+
+    public boolean fillLayer(TilePos pos, Layer layer, int value) {
+        Objects.requireNonNull(layer, "layer");
+        Tile tile = writable(pos);
+        if (tile == null) {
+            return false;
+        }
+        tile.fillLayer(layer, Math.clamp(value, 0, Layer.MAX_VALUE));
+        return true;
+    }
+
     public boolean setBiome(int x, int z, String biomeId) {
         Tile tile = writable(x, z);
         if (tile == null) {
@@ -104,8 +132,11 @@ public final class Edit implements AutoCloseable {
     }
 
     private Tile writable(int x, int z) {
+        return writable(TilePos.ofBlock(x, z));
+    }
+
+    private Tile writable(TilePos pos) {
         requireOpen();
-        TilePos pos = TilePos.ofBlock(x, z);
         Tile tile = model.tilesForEdit().get(pos);
         if (tile == null) {
             return null;

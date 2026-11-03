@@ -17,10 +17,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipException;
 import space.qu4nt.thirdparty.mcpainter.anvil.internal.AtomicFiles;
 import space.qu4nt.thirdparty.mcpainter.nbt.ByteArrayTag;
+import space.qu4nt.thirdparty.mcpainter.nbt.ByteTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.CompoundTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntArrayTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntTag;
@@ -36,6 +38,7 @@ import space.qu4nt.thirdparty.mcpainter.nbt.StringTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.Tag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -160,6 +163,7 @@ public final class ProjectFile {
                 .put("terrainTypes", ListTag.of(TagType.STRING, terrain))
                 .put("biomes", ListTag.of(TagType.STRING, biomes))
                 .put("seed", new LongTag(model.generation().seed()))
+                .put("initialOres", new ByteTag((byte) (model.generation().initialOres() ? 1 : 0)))
                 .build();
     }
 
@@ -177,6 +181,16 @@ public final class ProjectFile {
             waterInts[i] = water[i];
             biomeInts[i] = biomes[i] & 0xFFFF;
         }
+        CompoundTag.Builder layers = CompoundTag.builder();
+        for (Layer layer : Layer.values()) {
+            if (tile.layerUniform(layer)) {
+                if (tile.layerFill(layer) != 0) {
+                    layers.put(layer.id(), new IntTag(tile.layerFill(layer)));
+                }
+            } else {
+                layers.put(layer.id(), ByteArrayTag.of(tile.layerValues(layer)));
+            }
+        }
         return CompoundTag.builder()
                 .put("x", new IntTag(pos.x()))
                 .put("z", new IntTag(pos.z()))
@@ -184,6 +198,7 @@ public final class ProjectFile {
                 .put("terrain", ByteArrayTag.of(tile.terrainOrdinals()))
                 .put("water", IntArrayTag.of(waterInts))
                 .put("biomes", IntArrayTag.of(biomeInts))
+                .put("layers", layers.build())
                 .build();
     }
 
@@ -191,8 +206,18 @@ public final class ProjectFile {
             throws ProjectFormatException {
         GenerationSettings generation = GenerationSettings.DEFAULT;
         if (version >= 2) {
-            generation = new GenerationSettings(header.get("seed", LongTag.class)
-                    .orElseThrow(() -> new ProjectFormatException("missing long seed")).value());
+            long seed = header.get("seed", LongTag.class)
+                    .orElseThrow(() -> new ProjectFormatException("missing long seed")).value();
+            boolean initialOres = false;
+            if (header.contains("initialOres")) {
+                byte flag = header.get("initialOres", ByteTag.class)
+                        .orElseThrow(() -> new ProjectFormatException("initialOres must be a byte")).value();
+                if (flag != 0 && flag != 1) {
+                    throw new ProjectFormatException("initialOres must be 0 or 1");
+                }
+                initialOres = flag == 1;
+            }
+            generation = new GenerationSettings(seed, initialOres);
         }
         List<String> biomes = new ArrayList<>();
         for (Tag tag : requireList(header, "biomes")) {
@@ -250,7 +275,21 @@ public final class ProjectFile {
             biomes[i] = (short) biomeInts[i];
         }
         try {
-            builder.tile(new TilePos(requireInt(tag, "x"), requireInt(tag, "z")), heights, terrain, water, biomes);
+            TilePos pos = new TilePos(requireInt(tag, "x"), requireInt(tag, "z"));
+            builder.tile(pos, heights, terrain, water, biomes);
+            if (tag.contains("layers")) {
+                CompoundTag layers = tag.get("layers", CompoundTag.class)
+                        .orElseThrow(() -> new ProjectFormatException("layers must be a compound"));
+                for (Map.Entry<String, Tag> entry : layers.entries().entrySet()) {
+                    Layer layer = Layer.fromId(entry.getKey())
+                            .orElseThrow(() -> new ProjectFormatException("unknown layer " + entry.getKey()));
+                    switch (entry.getValue()) {
+                        case IntTag fill -> builder.layerFill(pos, layer, fill.value());
+                        case ByteArrayTag values -> builder.layer(pos, layer, values.toArray());
+                        default -> throw new ProjectFormatException("layer " + layer.id() + " has a wrong type");
+                    }
+                }
+            }
         } catch (IllegalArgumentException e) {
             throw new ProjectFormatException("invalid tile: " + e.getMessage(), e);
         }

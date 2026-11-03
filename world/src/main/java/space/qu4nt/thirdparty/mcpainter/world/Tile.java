@@ -14,12 +14,20 @@ public final class Tile {
     private final byte[] terrain;
     private final short[] water;
     private final short[] biomes;
+    private final byte[][] layers;
+    private final int[] layerFill;
 
-    private Tile(float[] heights, byte[] terrain, short[] water, short[] biomes) {
+    private Tile(float[] heights, byte[] terrain, short[] water, short[] biomes, byte[][] layers, int[] layerFill) {
         this.heights = heights;
         this.terrain = terrain;
         this.water = water;
         this.biomes = biomes;
+        this.layers = layers;
+        this.layerFill = layerFill;
+    }
+
+    private Tile(float[] heights, byte[] terrain, short[] water, short[] biomes) {
+        this(heights, terrain, water, biomes, new byte[Layer.count()][], new int[Layer.count()]);
     }
 
     static Tile filled(float height, TerrainType type, int waterLevel, int biomeIndex) {
@@ -55,7 +63,82 @@ public final class Tile {
     }
 
     Tile copy() {
-        return new Tile(heights.clone(), terrain.clone(), water.clone(), biomes.clone());
+        byte[][] layerCopy = new byte[layers.length][];
+        for (int i = 0; i < layers.length; i++) {
+            layerCopy[i] = layers[i] == null ? null : layers[i].clone();
+        }
+        return new Tile(heights.clone(), terrain.clone(), water.clone(), biomes.clone(), layerCopy, layerFill.clone());
+    }
+
+    long estimatedBytes() {
+        long bytes = ESTIMATED_BYTES;
+        for (byte[] values : layers) {
+            bytes += values == null ? 0 : AREA;
+        }
+        return bytes;
+    }
+
+    public int layer(Layer layer, int index) {
+        byte[] values = layers[layer.ordinal()];
+        return values == null ? layerFill[layer.ordinal()] : values[index] & 0xFF;
+    }
+
+    public boolean layerUniform(Layer layer) {
+        return layers[layer.ordinal()] == null;
+    }
+
+    public int layerFill(Layer layer) {
+        if (layers[layer.ordinal()] != null) {
+            throw new IllegalStateException(layer + " is not uniform");
+        }
+        return layerFill[layer.ordinal()];
+    }
+
+    public byte[] layerValues(Layer layer) {
+        byte[] values = layers[layer.ordinal()];
+        if (values == null) {
+            byte[] filled = new byte[AREA];
+            Arrays.fill(filled, (byte) layerFill[layer.ordinal()]);
+            return filled;
+        }
+        return values.clone();
+    }
+
+    public boolean layerEmpty(Layer layer) {
+        byte[] values = layers[layer.ordinal()];
+        if (values == null) {
+            return layerFill[layer.ordinal()] == 0;
+        }
+        for (byte value : values) {
+            if (value != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void setLayer(Layer layer, int index, int value) {
+        int ordinal = layer.ordinal();
+        byte[] values = layers[ordinal];
+        if (values == null) {
+            if (layerFill[ordinal] == value) {
+                return;
+            }
+            values = new byte[AREA];
+            Arrays.fill(values, (byte) layerFill[ordinal]);
+            layers[ordinal] = values;
+        }
+        values[index] = (byte) value;
+    }
+
+    void fillLayer(Layer layer, int value) {
+        layers[layer.ordinal()] = null;
+        layerFill[layer.ordinal()] = value;
+    }
+
+    void loadLayer(Layer layer, byte[] values) {
+        requireLength(values.length, layer.id());
+        layers[layer.ordinal()] = values.clone();
     }
 
     public float height(int index) {
@@ -118,7 +201,31 @@ public final class Tile {
     }
 
     boolean sameContent(Tile other) {
-        return Arrays.equals(heights, other.heights) && Arrays.equals(terrain, other.terrain)
-                && Arrays.equals(water, other.water) && Arrays.equals(biomes, other.biomes);
+        if (!(Arrays.equals(heights, other.heights) && Arrays.equals(terrain, other.terrain)
+                && Arrays.equals(water, other.water) && Arrays.equals(biomes, other.biomes))) {
+            return false;
+        }
+        for (Layer layer : Layer.values()) {
+            if (!sameLayer(other, layer)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean sameLayer(Tile other, Layer layer) {
+        int ordinal = layer.ordinal();
+        if (layers[ordinal] == null && other.layers[ordinal] == null) {
+            return layerFill[ordinal] == other.layerFill[ordinal];
+        }
+        if (layers[ordinal] != null && other.layers[ordinal] != null) {
+            return Arrays.equals(layers[ordinal], other.layers[ordinal]);
+        }
+        for (int i = 0; i < AREA; i++) {
+            if (layer(layer, i) != other.layer(layer, i)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

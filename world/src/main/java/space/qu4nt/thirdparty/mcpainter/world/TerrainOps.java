@@ -112,6 +112,22 @@ public final class TerrainOps {
         });
     }
 
+    public static void sprayLayer(Edit edit, int centerX, int centerZ, Brush brush, Layer layer, float amount) {
+        Objects.requireNonNull(layer, "layer");
+        if (!(amount >= -1 && amount <= 1)) {
+            throw new IllegalArgumentException("amount must be in [-1, 1]");
+        }
+        WorldModel model = edit.model();
+        forEachColumn(edit, centerX, centerZ, brush, (x, z, w) -> {
+            double delta = amount * w * Layer.MAX_VALUE;
+            long step = Math.round(delta);
+            if (step == 0 && delta != 0) {
+                step = delta > 0 ? 1 : -1;
+            }
+            edit.setLayer(x, z, layer, Math.clamp(model.layer(x, z, layer) + step, 0, Layer.MAX_VALUE));
+        });
+    }
+
     private static void requireFinite(float value, String what) {
         if (!Float.isFinite(value)) {
             throw new IllegalArgumentException(what + " must be finite");

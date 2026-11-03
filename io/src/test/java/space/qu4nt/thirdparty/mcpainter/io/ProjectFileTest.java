@@ -13,6 +13,7 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import space.qu4nt.thirdparty.mcpainter.nbt.ByteArrayTag;
+import space.qu4nt.thirdparty.mcpainter.nbt.ByteTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.CompoundTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntArrayTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.IntTag;
@@ -22,9 +23,11 @@ import space.qu4nt.thirdparty.mcpainter.nbt.NbtCompression;
 import space.qu4nt.thirdparty.mcpainter.nbt.NbtIo;
 import space.qu4nt.thirdparty.mcpainter.nbt.RootTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.StringTag;
+import space.qu4nt.thirdparty.mcpainter.nbt.Tag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -37,7 +40,7 @@ class ProjectFileTest {
 
     private static WorldModel sample() {
         WorldModel model = WorldModel.builder(-64, 320, 63).maxTiles(10)
-                .generation(new GenerationSettings(-1234567890123L)).build();
+                .generation(new GenerationSettings(-1234567890123L, true)).build();
         try (Edit edit = model.beginEdit("setup")) {
             edit.addTile(new TilePos(-1, 0), 70, TerrainType.GRASS);
             edit.addTile(new TilePos(3, -2), 40, TerrainType.SAND);
@@ -46,6 +49,8 @@ class ProjectFileTest {
             edit.setWaterLevel(-5, 7, -20);
             edit.setBiome(-5, 7, "minecraft:snowy_slopes");
             edit.setBiome(400, -200, "mymod:glow/caves");
+            edit.setLayer(-5, 7, Layer.OAK_TREES, 200);
+            edit.fillLayer(new TilePos(-1, 0), Layer.IRON_ORE, 0);
         }
         return model;
     }
@@ -61,7 +66,7 @@ class ProjectFileTest {
         assertEquals(original.maxY(), loaded.maxY());
         assertEquals(original.seaLevel(), loaded.seaLevel());
         assertEquals(original.maxTiles(), loaded.maxTiles());
-        assertEquals(-1234567890123L, loaded.generation().seed());
+        assertEquals(new GenerationSettings(-1234567890123L, true), loaded.generation());
         assertEquals(original.biomes(), loaded.biomes());
         assertEquals(original.tilePositions(), loaded.tilePositions());
         for (TilePos pos : original.tilePositions()) {
@@ -71,7 +76,15 @@ class ProjectFileTest {
             assertArrayEquals(a.terrainOrdinals(), b.terrainOrdinals());
             assertArrayEquals(a.waterLevels(), b.waterLevels());
             assertArrayEquals(a.biomeIndices(), b.biomeIndices());
+            for (Layer layer : Layer.values()) {
+                assertArrayEquals(a.layerValues(layer), b.layerValues(layer), layer.id());
+                assertEquals(a.layerUniform(layer), b.layerUniform(layer), layer.id());
+            }
         }
+        assertEquals(200, loaded.layer(-5, 7, Layer.OAK_TREES));
+        assertEquals(Layer.INITIAL_ORE_VALUE, loaded.layer(-5, 7, Layer.COAL_ORE));
+        assertEquals(0, loaded.layer(-5, 7, Layer.IRON_ORE));
+        assertEquals(Layer.INITIAL_ORE_VALUE, loaded.layer(400, -200, Layer.IRON_ORE));
         assertEquals(123.25f, loaded.height(-5, 7));
         assertEquals(TerrainType.SNOW, loaded.terrain(-5, 7));
         assertEquals(-20, loaded.waterLevel(-5, 7));
@@ -137,6 +150,50 @@ class ProjectFileTest {
     }
 
     @Test
+    void validatesLayerRecords() throws IOException {
+        byte[] trees = new byte[Tile.AREA];
+        trees[3] = (byte) 250;
+        WorldModel loaded = ProjectFile.load(Files.write(dir.resolve("layers" + ProjectFile.EXTENSION),
+                container(record(ProjectFile.RECORD_HEADER, header(5)), record(ProjectFile.RECORD_TILE,
+                        tile(0, 0, 0, Float.floatToIntBits(70), layers("oakTrees", ByteArrayTag.of(trees),
+                                "coalOre", new IntTag(9)))), end())));
+        assertEquals(250, loaded.layer(3, 0, Layer.OAK_TREES));
+        assertEquals(9, loaded.layer(50, 50, Layer.COAL_ORE));
+        assertEquals(false, loaded.generation().initialOres());
+        for (CompoundTag bad : new CompoundTag[] {
+                layers("goldOre", new IntTag(1)),
+                layers("coalOre", new IntTag(256)),
+                layers("coalOre", new IntTag(-1)),
+                layers("coalOre", ByteArrayTag.of(new byte[5])),
+                layers("coalOre", new StringTag("x"))}) {
+            assertRejected(container(record(ProjectFile.RECORD_HEADER, header(5)),
+                    record(ProjectFile.RECORD_TILE, tile(0, 0, 0, Float.floatToIntBits(70), bad)), end()));
+        }
+        assertRejected(container(record(ProjectFile.RECORD_HEADER, withFlag(header(5), 2)), end()));
+        assertRejected(container(withIntFlag(), end()));
+    }
+
+    private static CompoundTag layers(Object... entries) {
+        CompoundTag.Builder builder = CompoundTag.builder();
+        for (int i = 0; i < entries.length; i += 2) {
+            builder.put((String) entries[i], (Tag) entries[i + 1]);
+        }
+        return builder.build();
+    }
+
+    private static CompoundTag withFlag(CompoundTag header, int flag) {
+        CompoundTag.Builder builder = CompoundTag.builder();
+        header.entries().forEach(builder::put);
+        return builder.put("initialOres", new ByteTag((byte) flag)).build();
+    }
+
+    private static byte[] withIntFlag() throws IOException {
+        CompoundTag.Builder builder = CompoundTag.builder();
+        header(5).entries().forEach(builder::put);
+        return record(ProjectFile.RECORD_HEADER, builder.put("initialOres", new IntTag(1)).build());
+    }
+
+    @Test
     void readsVersionOneFiles() throws IOException {
         byte[] v1 = container(1, record(ProjectFile.RECORD_HEADER, header(5, null)),
                 record(ProjectFile.RECORD_TILE, tile(0, 0, 0, Float.floatToIntBits(70))), end());
@@ -177,6 +234,12 @@ class ProjectFileTest {
             builder.put("seed", new LongTag(seed));
         }
         return builder.build();
+    }
+
+    private static CompoundTag tile(int x, int z, int terrainIndex, int heightBits, CompoundTag layers) {
+        CompoundTag.Builder builder = CompoundTag.builder();
+        tile(x, z, terrainIndex, heightBits).entries().forEach(builder::put);
+        return builder.put("layers", layers).build();
     }
 
     private static CompoundTag tile(int x, int z, int terrainIndex, int heightBits) {

@@ -19,7 +19,7 @@ final class EditHistory {
         }
 
         long estimatedBytes() {
-            return before.values().stream().filter(t -> t != null).count() * Tile.ESTIMATED_BYTES;
+            return before.values().stream().filter(t -> t != null).mapToLong(Tile::estimatedBytes).sum();
         }
     }
 
