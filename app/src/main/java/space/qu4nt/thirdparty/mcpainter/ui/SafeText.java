@@ -62,6 +62,10 @@ final class SafeText {
         button.setText(neutralize(text));
     }
 
+    static void setText(JTextArea area, String text) {
+        area.setText(neutralize(text));
+    }
+
     static JTextArea message(String text) {
         return message(text, MESSAGE_COLUMNS);
     }

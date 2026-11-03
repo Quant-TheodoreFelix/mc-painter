@@ -14,30 +14,19 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
+import space.qu4nt.thirdparty.mcpainter.anvil.world.VanillaBiomes;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class TerrainPanel {
 
-    static final List<String> BIOMES = List.of(
-            "minecraft:plains", "minecraft:sunflower_plains", "minecraft:snowy_plains", "minecraft:ice_spikes",
-            "minecraft:desert", "minecraft:swamp", "minecraft:forest", "minecraft:flower_forest",
-            "minecraft:birch_forest", "minecraft:dark_forest", "minecraft:old_growth_birch_forest",
-            "minecraft:old_growth_pine_taiga", "minecraft:old_growth_spruce_taiga", "minecraft:taiga",
-            "minecraft:snowy_taiga", "minecraft:savanna", "minecraft:savanna_plateau", "minecraft:windswept_hills",
-            "minecraft:windswept_gravelly_hills", "minecraft:windswept_forest", "minecraft:windswept_savanna",
-            "minecraft:jungle", "minecraft:sparse_jungle", "minecraft:bamboo_jungle", "minecraft:badlands",
-            "minecraft:eroded_badlands", "minecraft:wooded_badlands", "minecraft:meadow", "minecraft:grove",
-            "minecraft:snowy_slopes", "minecraft:frozen_peaks", "minecraft:jagged_peaks", "minecraft:stony_peaks",
-            "minecraft:river", "minecraft:frozen_river", "minecraft:beach", "minecraft:snowy_beach",
-            "minecraft:stony_shore", "minecraft:warm_ocean", "minecraft:lukewarm_ocean",
-            "minecraft:deep_lukewarm_ocean", "minecraft:ocean", "minecraft:deep_ocean", "minecraft:cold_ocean",
-            "minecraft:deep_cold_ocean", "minecraft:frozen_ocean", "minecraft:deep_frozen_ocean",
-            "minecraft:mushroom_fields", "minecraft:dripstone_caves", "minecraft:lush_caves");
+    static final List<String> BIOMES = VanillaBiomes.overworld().stream().map(VanillaBiomes.Biome::id).toList();
 
     private static final int NOTE_COLUMNS = 18;
+    private static final int BIOME_COLUMNS = 20;
 
     private final BrushSettings settings;
     private final Document document;
@@ -47,6 +36,7 @@ final class TerrainPanel {
     private final JList<TerrainType> terrains = new JList<>(TerrainType.values());
     private final SpinnerNumberModel waterModel;
     private final JComboBox<String> biomes = new JComboBox<>(BIOMES.toArray(String[]::new));
+    private final JTextArea biomeHint = SafeText.message("", NOTE_COLUMNS);
     private boolean syncing;
 
     TerrainPanel(BrushSettings settings, Document document, Messages messages, Consumer<String> notice) {
@@ -92,8 +82,12 @@ final class TerrainPanel {
         ToolPanel.addWide(waterSection, 2, hint);
 
         biomes.setEditable(true);
+        if (biomes.getEditor().getEditorComponent() instanceof JTextField field) {
+            field.setColumns(BIOME_COLUMNS);
+        }
         biomes.setMaximumRowCount(16);
-        biomes.setRenderer(Renderers.text(String::valueOf));
+        biomes.setRenderer(Renderers.withTooltip(id -> Labels.biomeEntry(messages, String.valueOf(id)),
+                String::valueOf));
         biomes.addActionListener(e -> {
             if (!syncing) {
                 applyBiome();
@@ -103,6 +97,8 @@ final class TerrainPanel {
         biomeSection.setBorder(ToolPanel.section(messages.text("panel.biome")));
         biomeSection.add(SafeText.label(messages.text("biome.id")), BorderLayout.NORTH);
         biomeSection.add(biomes, BorderLayout.CENTER);
+        biomeHint.setFont(biomeHint.getFont().deriveFont(Font.PLAIN, biomeHint.getFont().getSize2D() - 1));
+        biomeSection.add(biomeHint, BorderLayout.SOUTH);
 
         JPanel stack = new JPanel();
         stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
@@ -156,6 +152,7 @@ final class TerrainPanel {
             terrains.setSelectedValue(settings.terrain(), true);
             waterModel.setValue(settings.waterLevel());
             biomes.setSelectedItem(settings.biome());
+            SafeText.setText(biomeHint, Labels.biomeHint(messages, settings.biome()));
         } finally {
             syncing = false;
         }

@@ -48,7 +48,7 @@ final class StatusBar {
         SafeText.setText(column, messages.text("status.column", Integer.toString(x), Integer.toString(z),
                 String.format(Locale.ROOT, "%.1f", model.height(x, z)),
                 messages.text(Labels.terrainKey(model.terrain(x, z))),
-                Integer.toString(model.waterLevel(x, z)), model.biome(x, z)));
+                Integer.toString(model.waterLevel(x, z)), Labels.biomeName(messages, model.biome(x, z))));
     }
 
     void clearColumn() {

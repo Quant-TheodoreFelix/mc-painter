@@ -40,6 +40,17 @@ final class Renderers {
         return withIcon(label, value -> null);
     }
 
+    static <T> ListCellRenderer<T> withTooltip(Function<? super T, String> label,
+            Function<? super T, String> tooltip) {
+        DefaultListCellRenderer base = SafeText.plain(new DefaultListCellRenderer());
+        return (list, value, index, selected, focused) -> {
+            String text = value == null ? "" : SafeText.neutralize(label.apply(value));
+            Component component = base.getListCellRendererComponent(list, text, index, selected, focused);
+            base.setToolTipText(value == null ? null : SafeText.neutralize(tooltip.apply(value)));
+            return component;
+        };
+    }
+
     static <T> ListCellRenderer<T> withIcon(Function<? super T, String> label, Function<? super T, Icon> icon) {
         DefaultListCellRenderer base = SafeText.plain(new DefaultListCellRenderer());
         return (list, value, index, selected, focused) -> {

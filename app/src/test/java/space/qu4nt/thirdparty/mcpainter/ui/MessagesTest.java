@@ -20,6 +20,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import space.qu4nt.thirdparty.mcpainter.anvil.world.VanillaBiomes;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 
@@ -71,6 +72,9 @@ class MessagesTest {
             for (Brush.Falloff falloff : Brush.Falloff.values()) {
                 assertTrue(messages.has(Labels.falloffKey(falloff)), falloff.name());
             }
+            for (VanillaBiomes.Biome biome : VanillaBiomes.all()) {
+                assertTrue(messages.has(Labels.biomeKey(biome)), biome.id());
+            }
         }
     }
 
@@ -104,6 +108,15 @@ class MessagesTest {
         assertEquals("올리기 (1)", ko.text("tool.shortcut", ko.text("tool.raise"), "1"));
         assertEquals("Undo Raise", en.text("menu.edit.undoNamed", en.text("tool.raise")));
         assertEquals("no.such.key", ko.text("no.such.key"));
+        assertEquals("평원", Labels.biomeEntry(ko, "minecraft:plains"));
+        assertEquals("벚나무 숲 (1.20 이상)", Labels.biomeEntry(ko, "minecraft:cherry_grove"));
+        assertEquals("Dappled Forest (26.3 or later)", Labels.biomeEntry(en, "minecraft:dappled_forest"));
+        assertEquals(ko.text("biome.unknown"), Labels.biomeHint(ko, "minecraft:plainz"));
+        assertEquals(ko.text("biome.custom"), Labels.biomeHint(ko, "mymod:glow/caves"));
+        assertEquals("창백한 정원 (1.21.4 이상)", Labels.biomeHint(ko, "minecraft:pale_garden"));
+        assertEquals("mymod:glow/caves", Labels.biomeEntry(ko, "mymod:glow/caves"));
+        assertEquals("사막", Labels.biomeName(ko, "minecraft:desert"));
+        assertEquals("minecraft:plainz", Labels.biomeName(en, "minecraft:plainz"));
         assertEquals(Locale.KOREAN, ko.language().locale());
     }
 
