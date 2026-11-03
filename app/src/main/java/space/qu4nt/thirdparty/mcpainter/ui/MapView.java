@@ -53,8 +53,6 @@ final class MapView {
     static final int MAX_RADIUS_STEPS = 64;
     static final int PAN_MODIFIERS = InputEvent.CTRL_DOWN_MASK | InputEvent.META_DOWN_MASK;
     private static final Color BACKGROUND = new Color(0x26282B);
-    private static final Color CHUNK_LINE = new Color(0, 0, 0, 40);
-    private static final Color TILE_LINE = new Color(0, 0, 0, 110);
     private static final Color BRUSH_OUTER = new Color(0, 0, 0, 170);
     private static final Color BRUSH_INNER = new Color(255, 255, 255, 230);
     private static final Color ADD_PREVIEW = new Color(255, 255, 255, 70);
@@ -78,6 +76,8 @@ final class MapView {
     private Point mouse;
     private boolean spaceDown;
     private boolean showGrid = true;
+    private Color chunkLine = gridColor(Settings.DEFAULT_CHUNK_GRID);
+    private Color tileLine = gridColor(Settings.DEFAULT_TILE_GRID);
     private boolean fitPending = true;
     private double radiusRemainder;
 
@@ -186,6 +186,16 @@ final class MapView {
     void setShowGrid(boolean value) {
         showGrid = value;
         canvas.repaint();
+    }
+
+    void setGridOpacity(int chunkPercent, int tilePercent) {
+        chunkLine = gridColor(chunkPercent);
+        tileLine = gridColor(tilePercent);
+        canvas.repaint();
+    }
+
+    static Color gridColor(int percent) {
+        return new Color(0, 0, 0, Math.round(Math.clamp(percent, 0, 100) * 255 / 100f));
     }
 
     boolean strokeActive() {
@@ -460,8 +470,8 @@ final class MapView {
         int maxTileZ = tileIndex(viewport.worldZ(clip.y + clip.height));
         Tool active = stroke != null ? stroke.tool() : settings.tool();
         List<Layer> overlay = active.paintsLayer() ? settings.paintLayers() : List.of();
-        boolean chunkGrid = showGrid && 16 * scale >= GRID_MIN_PIXELS;
-        boolean tileGrid = showGrid && Tile.SIZE * scale >= GRID_MIN_PIXELS;
+        boolean chunkGrid = showGrid && chunkLine.getAlpha() > 0 && 16 * scale >= GRID_MIN_PIXELS;
+        boolean tileGrid = showGrid && tileLine.getAlpha() > 0 && Tile.SIZE * scale >= GRID_MIN_PIXELS;
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
         for (int tz = minTileZ; tz <= maxTileZ; tz++) {
             for (int tx = minTileX; tx <= maxTileX; tx++) {
@@ -475,7 +485,7 @@ final class MapView {
                 int z1 = screenZ(pos.minBlockZ() + Tile.SIZE);
                 g.drawImage(cache.image(model, pos, lod, overlay), x0, z0, x1 - x0, z1 - z0, null);
                 if (chunkGrid) {
-                    g.setColor(CHUNK_LINE);
+                    g.setColor(chunkLine);
                     for (int offset = 16; offset < Tile.SIZE; offset += 16) {
                         int cx = screenX(pos.minBlockX() + offset);
                         int cz = screenZ(pos.minBlockZ() + offset);
@@ -484,7 +494,7 @@ final class MapView {
                     }
                 }
                 if (tileGrid) {
-                    g.setColor(TILE_LINE);
+                    g.setColor(tileLine);
                     g.drawRect(x0, z0, x1 - x0 - 1, z1 - z0 - 1);
                 }
             }

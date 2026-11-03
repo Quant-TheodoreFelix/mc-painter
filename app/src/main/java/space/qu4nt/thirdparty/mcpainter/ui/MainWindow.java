@@ -42,6 +42,8 @@ final class MainWindow {
     private final JMenuItem redoItem;
     private final boolean nativeQuit;
     private final int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+    private JCheckBoxMenuItem gridItem;
+    private GridDialog gridDialog;
 
     MainWindow(Messages messages, Settings settings, WorldModel initial) {
         this.messages = messages;
@@ -74,6 +76,7 @@ final class MainWindow {
                 status.notice(text);
             }
         });
+        map.setGridOpacity(settings.chunkGridOpacity(), settings.tileGridOpacity());
         this.project = new ProjectActions(frame, messages, document, map);
         this.undoItem = item("menu.edit.undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), this::undo);
         this.redoItem = item("menu.edit.redo",
@@ -178,7 +181,9 @@ final class MainWindow {
         JCheckBoxMenuItem grid = SafeText.plain(new JCheckBoxMenuItem(messages.text("menu.view.grid"), map.showGrid()));
         grid.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, menuMask));
         grid.addActionListener(e -> map.setShowGrid(grid.isSelected()));
+        gridItem = grid;
         view.add(grid);
+        view.add(item("menu.view.gridSettings", null, this::gridSettings));
         view.addSeparator();
         view.add(item("menu.view.zoomIn", KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, menuMask), map::zoomIn));
         view.add(item("menu.view.zoomOut", KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, menuMask), map::zoomOut));
@@ -280,6 +285,17 @@ final class MainWindow {
             edit.setGeneration(model.generation().withSeed(seed));
         }
         document.changed();
+    }
+
+    private void gridSettings() {
+        if (!map.showGrid()) {
+            map.setShowGrid(true);
+            gridItem.setSelected(true);
+        }
+        if (gridDialog == null) {
+            gridDialog = new GridDialog(frame, messages, settings, map::setGridOpacity);
+        }
+        gridDialog.show();
     }
 
     private void changeLanguage(Language language) {
