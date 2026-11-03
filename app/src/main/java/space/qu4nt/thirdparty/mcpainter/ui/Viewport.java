@@ -2,7 +2,7 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 
 final class Viewport {
 
-    static final int MIN_ZOOM = -4;
+    static final int MIN_ZOOM = -17;
     static final int MAX_ZOOM = 4;
     static final int MAX_FIT_ZOOM = 2;
     static final double WORLD_LIMIT = 30_000_000;
@@ -26,6 +26,14 @@ final class Viewport {
 
     int percent() {
         return (int) Math.round(scale() * 100);
+    }
+
+    String percentText() {
+        double value = scale() * 100;
+        if (value >= 1) {
+            return Long.toString(Math.round(value));
+        }
+        return String.format(java.util.Locale.ROOT, "%.3g", value);
     }
 
     double originX() {

@@ -29,6 +29,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import space.qu4nt.thirdparty.mcpainter.io.Workspace;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
+import space.qu4nt.thirdparty.mcpainter.world.TileRect;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class MainWindow {
@@ -47,6 +48,7 @@ final class MainWindow {
     private final int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
     private final Performance.Environment environment = Performance.Environment.current();
     private JCheckBoxMenuItem gridItem;
+    private JCheckBoxMenuItem areaItem;
     private GridDialog gridDialog;
 
     MainWindow(Messages messages, Settings settings, WorldModel initial) {
@@ -79,11 +81,27 @@ final class MainWindow {
             public void notice(String text) {
                 status.notice(text);
             }
+
+            @Override
+            public void areaRequested(TileRect area) {
+                if (project.loadArea(area)) {
+                    map.setAreaMode(false);
+                }
+            }
+
+            @Override
+            public void areaModeChanged(boolean active) {
+                if (areaItem != null) {
+                    areaItem.setSelected(active);
+                }
+            }
         });
         map.setGridOpacity(settings.chunkGridOpacity(), settings.tileGridOpacity());
         map.setPreview(settings.preview());
         map.setThreads(settings.threads(environment));
         this.project = new ProjectActions(frame, messages, document, map, settings, environment, status::notice);
+        map.setAreaBudget(project::budgetTiles, rect -> document.workspace()
+                .map(workspace -> Session.areaCost(workspace, rect)).orElse(rect.count()));
         this.undoItem = item("menu.edit.undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), this::undo);
         this.redoItem = item("menu.edit.redo",
                 KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | InputEvent.SHIFT_DOWN_MASK), this::redo);
@@ -190,6 +208,22 @@ final class MainWindow {
             redoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Y, menuMask));
         }
         bar.add(edit);
+
+        JMenu area = menu("menu.area");
+        JCheckBoxMenuItem select = SafeText.plain(new JCheckBoxMenuItem(messages.text("menu.area.select")));
+        select.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, menuMask));
+        select.addActionListener(e -> {
+            map.setAreaMode(select.isSelected());
+            select.setSelected(map.areaMode());
+            map.component().requestFocusInWindow();
+        });
+        areaItem = select;
+        area.add(select);
+        area.add(item("menu.area.load", KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, menuMask), map::requestArea));
+        area.add(item("menu.area.close", null, project::closeArea));
+        area.addSeparator();
+        area.add(item("menu.area.fitWorld", KeyStroke.getKeyStroke(KeyEvent.VK_8, menuMask), map::fitWorldBounds));
+        bar.add(area);
 
         JMenu view = menu("menu.view");
         JCheckBoxMenuItem grid = SafeText.plain(new JCheckBoxMenuItem(messages.text("menu.view.grid"), map.showGrid()));
@@ -400,6 +434,10 @@ final class MainWindow {
 
     private void refreshView() {
         WorldModel model = document.model();
-        status.showView(map.viewport().percent(), model.tileCount(), model.maxTiles());
+        if (document.workspace().isPresent() && document.area().isEmpty()) {
+            status.showOverview(map.viewport().percentText());
+        } else {
+            status.showView(map.viewport().percentText(), model.tileCount(), model.maxTiles());
+        }
     }
 }

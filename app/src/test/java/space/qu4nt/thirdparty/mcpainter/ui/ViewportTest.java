@@ -91,6 +91,8 @@ class ViewportTest {
         view.fit(0, 0, 128, 128, 800, 600);
         assertEquals(Viewport.MAX_FIT_ZOOM, view.zoom(), 1e-9);
         view.fit(-100_000, 0, 100_000, 10, 800, 600);
+        assertEquals(-9, view.zoom(), 1e-9);
+        view.fit(-30_000_000, 0, 30_000_000, 10, 800, 600);
         assertEquals(Viewport.MIN_ZOOM, view.zoom(), 1e-9);
     }
 }

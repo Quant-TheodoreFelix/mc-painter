@@ -71,8 +71,16 @@ final class StatusBar {
     }
 
     void showView(int zoomPercent, int tiles, int maxTiles) {
-        SafeText.setText(view, messages.text("status.view", Integer.toString(zoomPercent), Integer.toString(tiles),
+        showView(Integer.toString(zoomPercent), tiles, maxTiles);
+    }
+
+    void showView(String zoomPercent, int tiles, int maxTiles) {
+        SafeText.setText(view, messages.text("status.view", zoomPercent, Integer.toString(tiles),
                 Integer.toString(maxTiles)));
+    }
+
+    void showOverview(String zoomPercent) {
+        SafeText.setText(view, messages.text("status.overview", zoomPercent));
     }
 
     void notice(String text) {

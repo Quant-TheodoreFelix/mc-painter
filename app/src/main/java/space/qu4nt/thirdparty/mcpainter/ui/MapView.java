@@ -25,6 +25,8 @@ import java.util.Optional;
 import java.util.SequencedSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.function.IntSupplier;
+import java.util.function.ToLongFunction;
 import javax.swing.AbstractAction;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
@@ -32,9 +34,11 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import space.qu4nt.thirdparty.mcpainter.io.SurfacePreview;
+import space.qu4nt.thirdparty.mcpainter.io.Workspace;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
+import space.qu4nt.thirdparty.mcpainter.world.TileRect;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class MapView {
@@ -50,6 +54,10 @@ final class MapView {
         void strokeFinished();
 
         void notice(String text);
+
+        void areaRequested(TileRect area);
+
+        void areaModeChanged(boolean active);
     }
 
     static final int REPEAT_MILLIS = 50;
@@ -64,6 +72,18 @@ final class MapView {
     private static final Color DELETE_PREVIEW = new Color(235, 35, 35, 130);
     private static final Color DELETE_EDGE = new Color(255, 40, 40, 230);
     private static final int GRID_MIN_PIXELS = 12;
+    static final int DETAIL_TILE_PIXELS = 8;
+    static final int EDGE_PIXELS = 6;
+    private static final Color OUTSIDE_AREA = new Color(0, 0, 0, 120);
+    private static final Color NO_AREA = new Color(0, 0, 0, 60);
+    private static final Color BOUNDS_EDGE = new Color(255, 255, 255, 110);
+    private static final Color AREA_EDGE = new Color(255, 255, 255, 235);
+    private static final Color SELECTION_FILL = new Color(80, 200, 255, 50);
+    private static final Color SELECTION_EDGE = new Color(80, 200, 255, 240);
+    private static final Color SELECTION_OVER = new Color(255, 80, 80, 240);
+    private static final Color PENDING_EDGE = new Color(255, 166, 64, 200);
+    private static final Color LABEL_BACK = new Color(0, 0, 0, 170);
+    private static final int HANDLE = 4;
 
     private final Document document;
     private final BrushSettings settings;
@@ -71,6 +91,12 @@ final class MapView {
     private final Listener listener;
     private final Viewport viewport = new Viewport();
     private final TileImageCache cache = new TileImageCache(TileImageCache.DEFAULT_MAX_BYTES);
+    private final OverviewRenderer overview = new OverviewRenderer(cache);
+    private final AreaSelection selection = new AreaSelection();
+    private boolean areaMode;
+    private long dataVersion;
+    private IntSupplier budget = () -> Integer.MAX_VALUE;
+    private ToLongFunction<TileRect> areaCost = TileRect::count;
     private final PreviewCache previews;
     private final ExecutorService previewPool;
     private boolean preview;
@@ -119,6 +145,7 @@ final class MapView {
         strokeListener = new BrushStroke.Listener() {
             @Override
             public void changed(SequencedSet<TilePos> tiles) {
+                dataVersion++;
                 cache.invalidate(tiles);
                 previews.invalidate(tiles);
                 canvas.repaint();
@@ -183,7 +210,16 @@ final class MapView {
             finishStroke();
             cache.clear();
             previews.clear();
+            overview.clearThumbs();
+            dataVersion++;
+            selection.set(document.area().orElse(null));
+            setAreaMode(document.workspace().isPresent() && document.area().isEmpty());
             fitToWorld();
+        });
+        document.onStateChanged(() -> {
+            dataVersion++;
+            overview.clearThumbs();
+            canvas.repaint();
         });
     }
 
@@ -218,7 +254,59 @@ final class MapView {
         return stroke != null;
     }
 
+    void setAreaBudget(IntSupplier tiles, ToLongFunction<TileRect> cost) {
+        budget = tiles;
+        areaCost = cost;
+    }
+
+    boolean areaMode() {
+        return areaMode;
+    }
+
+    void setAreaMode(boolean value) {
+        boolean next = value && document.workspace().isPresent();
+        if (next == areaMode) {
+            return;
+        }
+        areaMode = next;
+        if (next) {
+            finishStroke();
+            if (selection.rect().isEmpty()) {
+                selection.set(document.area().orElse(null));
+            }
+        }
+        selection.release();
+        updateCursor();
+        listener.areaModeChanged(next);
+    }
+
+    Optional<TileRect> selection() {
+        return selection.rect();
+    }
+
+    void requestArea() {
+        Optional<TileRect> rect = selection.rect();
+        if (rect.isPresent() && document.workspace().isPresent()) {
+            listener.areaRequested(rect.get());
+        }
+    }
+
+    void fitWorldBounds() {
+        int width = canvas.getWidth();
+        int height = canvas.getHeight();
+        Optional<TileRect> world = worldRect();
+        if (width <= 0 || height <= 0 || world.isEmpty()) {
+            fitToWorld();
+            return;
+        }
+        TileRect rect = world.get();
+        viewport.fit(rect.minBlockX(), rect.minBlockZ(), rect.maxBlockX() + 1, rect.maxBlockZ() + 1, width, height);
+        listener.viewChanged();
+        canvas.repaint();
+    }
+
     void invalidateAll() {
+        dataVersion++;
         cache.clear();
         previews.invalidateAll();
         canvas.repaint();
@@ -284,23 +372,56 @@ final class MapView {
 
     private void fit(int width, int height) {
         fitPending = false;
-        WorldModel model = document.model();
-        if (model.tileCount() == 0) {
+        Optional<TileRect> target = fitRect();
+        if (target.isEmpty()) {
             viewport.setZoom(0, 0, 0);
             viewport.centerOn(0, 0, width, height);
             return;
+        }
+        TileRect rect = target.get();
+        viewport.fit(rect.minBlockX(), rect.minBlockZ(), rect.maxBlockX() + 1, rect.maxBlockZ() + 1, width, height);
+    }
+
+    private Optional<TileRect> fitRect() {
+        Optional<Workspace> workspace = document.workspace();
+        WorldModel model = document.model();
+        if (workspace.isPresent() && model.base().filled()) {
+            return document.area().or(() -> Optional.of(workspace.get().spec().bounds()));
+        }
+        Optional<TileRect> tiles = tileBox(model.tilePositions());
+        return tiles.isPresent() ? tiles : worldRect();
+    }
+
+    private Optional<TileRect> worldRect() {
+        Optional<Workspace> workspace = document.workspace();
+        if (workspace.isEmpty()) {
+            return tileBox(document.model().tilePositions());
+        }
+        if (workspace.get().spec().base().filled()) {
+            return Optional.of(workspace.get().spec().bounds());
+        }
+        List<TilePos> stored = new java.util.ArrayList<>(document.model().tilePositions());
+        for (Workspace.Entry entry : workspace.get().entries()) {
+            stored.add(entry.pos());
+        }
+        return tileBox(stored);
+    }
+
+    private static Optional<TileRect> tileBox(java.util.Collection<TilePos> positions) {
+        if (positions.isEmpty()) {
+            return Optional.empty();
         }
         int minX = Integer.MAX_VALUE;
         int minZ = Integer.MAX_VALUE;
         int maxX = Integer.MIN_VALUE;
         int maxZ = Integer.MIN_VALUE;
-        for (TilePos pos : model.tilePositions()) {
-            minX = Math.min(minX, pos.minBlockX());
-            minZ = Math.min(minZ, pos.minBlockZ());
-            maxX = Math.max(maxX, pos.minBlockX() + Tile.SIZE);
-            maxZ = Math.max(maxZ, pos.minBlockZ() + Tile.SIZE);
+        for (TilePos pos : positions) {
+            minX = Math.min(minX, pos.x());
+            minZ = Math.min(minZ, pos.z());
+            maxX = Math.max(maxX, pos.x());
+            maxZ = Math.max(maxZ, pos.z());
         }
-        viewport.fit(minX, minZ, maxX, maxZ, width, height);
+        return Optional.of(new TileRect(minX, minZ, maxX, maxZ));
     }
 
     private void pressed(MouseEvent e) {
@@ -319,6 +440,18 @@ final class MapView {
             return;
         }
         if (!left && !right) {
+            return;
+        }
+        if (areaMode) {
+            if (left && document.workspace().isPresent()) {
+                if (e.getClickCount() == 2 && selection.rect().filter(r -> r.contains(tileAt(e.getPoint()))).isPresent()) {
+                    requestArea();
+                    return;
+                }
+                selection.press(tileAt(e.getPoint()), edgesAt(e.getPoint()), document.workspace().get().spec().bounds());
+                activeButton = e.getButton();
+                canvas.repaint();
+            }
             return;
         }
         Optional<Tool> tool = right ? settings.tool().inverse() : Optional.of(settings.tool());
@@ -340,6 +473,10 @@ final class MapView {
         }
         if (panAnchor != null) {
             endPan();
+        } else if (selection.dragging()) {
+            selection.release();
+            activeButton = MouseEvent.NOBUTTON;
+            canvas.repaint();
         } else {
             finishStroke();
         }
@@ -351,6 +488,8 @@ final class MapView {
             viewport.pan(e.getX() - panAnchor.x, e.getY() - panAnchor.y);
             panAnchor = e.getPoint();
             listener.viewChanged();
+        } else if (selection.dragging() && document.workspace().isPresent()) {
+            selection.dragTo(tileAt(e.getPoint()), document.workspace().get().spec().bounds());
         } else if (stroke != null) {
             try {
                 stroke.dragTo(blockX(e.getX()), blockZ(e.getY()));
@@ -435,6 +574,21 @@ final class MapView {
         }
     }
 
+    private TilePos tileAt(Point point) {
+        return TilePos.ofBlock(blockX(point.x), blockZ(point.y));
+    }
+
+    private int edgesAt(Point point) {
+        Optional<TileRect> rect = selection.rect();
+        if (rect.isEmpty()) {
+            return 0;
+        }
+        TileRect r = rect.get();
+        return AreaSelection.edgesNear(point.x, point.y, viewport.screenX(r.minBlockX()),
+                viewport.screenZ(r.minBlockZ()), viewport.screenX(r.maxBlockX() + 1.0),
+                viewport.screenZ(r.maxBlockZ() + 1.0), EDGE_PIXELS);
+    }
+
     private int blockX(int screenX) {
         return (int) Math.floor(viewport.worldX(screenX));
     }
@@ -444,7 +598,8 @@ final class MapView {
     }
 
     private void updateCursor() {
-        int type = panAnchor != null || spaceDown ? Cursor.MOVE_CURSOR : Cursor.CROSSHAIR_CURSOR;
+        int type = panAnchor != null || spaceDown ? Cursor.MOVE_CURSOR
+                : areaMode ? Cursor.DEFAULT_CURSOR : Cursor.CROSSHAIR_CURSOR;
         canvas.setCursor(Cursor.getPredefinedCursor(type));
         canvas.repaint();
     }
@@ -458,6 +613,12 @@ final class MapView {
             spaceDown = false;
             updateCursor();
         });
+        bind("ENTER", "areaLoad", () -> {
+            if (areaMode) {
+                requestArea();
+            }
+        });
+        bind("ESCAPE", "areaCancel", () -> setAreaMode(false));
         bind("OPEN_BRACKET", "radius.down", () -> settings.setRadius(settings.radius() - radiusStep()));
         bind("CLOSE_BRACKET", "radius.up", () -> settings.setRadius(settings.radius() + radiusStep()));
         for (Tool tool : Tool.values()) {
@@ -498,6 +659,30 @@ final class MapView {
             clip = new Rectangle(0, 0, width, height);
         }
         WorldModel model = document.model();
+        Optional<Workspace> workspace = document.workspace();
+        double scale = viewport.scale();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        if (workspace.isPresent() && Tile.SIZE * scale < DETAIL_TILE_PIXELS) {
+            g.drawImage(overview.render(viewport, width, height, model, workspace.get(),
+                    BACKGROUND.getRGB() & 0xFFFFFF, dataVersion), 0, 0, null);
+        } else {
+            paintTiles(g, clip, model, workspace);
+        }
+        if (workspace.isPresent()) {
+            paintBounds(g, workspace.get(), width, height);
+        }
+        if (preview) {
+            previews.keepOnly(visibleTiles(width, height));
+        }
+        if (areaMode) {
+            paintSelection(g);
+        } else {
+            paintBrush(g, scale);
+        }
+        paintHint(g, width, height, workspace);
+    }
+
+    private void paintTiles(Graphics2D g, Rectangle clip, WorldModel model, Optional<Workspace> workspace) {
         double scale = viewport.scale();
         int lod = Math.min(viewport.lod(), TileRenderer.MAX_LOD);
         int minTileX = tileIndex(viewport.worldX(clip.x));
@@ -508,17 +693,40 @@ final class MapView {
         List<Layer> overlay = active.paintsLayer() ? settings.paintLayers() : List.of();
         boolean chunkGrid = showGrid && chunkLine.getAlpha() > 0 && 16 * scale >= GRID_MIN_PIXELS;
         boolean tileGrid = showGrid && tileLine.getAlpha() > 0 && Tile.SIZE * scale >= GRID_MIN_PIXELS;
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        TileRect bounds = workspace.map(w -> w.spec().bounds()).orElse(TileRect.WORLD);
+        if (workspace.isPresent()) {
+            int base = Session.baseColor(workspace.get().spec());
+            if (base >= 0) {
+                Rectangle area = screenRect(bounds).intersection(clip);
+                if (!area.isEmpty()) {
+                    g.setColor(new Color(base));
+                    g.fill(area);
+                }
+            }
+        }
         for (int tz = minTileZ; tz <= maxTileZ; tz++) {
             for (int tx = minTileX; tx <= maxTileX; tx++) {
                 TilePos pos = new TilePos(tx, tz);
-                if (model.tile(pos).isEmpty()) {
+                if (!bounds.contains(pos)) {
                     continue;
                 }
                 int x0 = screenX(pos.minBlockX());
                 int x1 = screenX(pos.minBlockX() + Tile.SIZE);
                 int z0 = screenZ(pos.minBlockZ());
                 int z1 = screenZ(pos.minBlockZ() + Tile.SIZE);
+                if (model.tile(pos).isEmpty()) {
+                    if (workspace.isPresent()) {
+                        java.awt.image.BufferedImage thumb = overview.thumb(workspace.get(), pos);
+                        if (thumb != null) {
+                            g.drawImage(thumb, x0, z0, x1 - x0, z1 - z0, null);
+                            if (workspace.get().entry(pos).map(Workspace.Entry::pending).orElse(false)) {
+                                g.setColor(PENDING_EDGE);
+                                g.drawRect(x0 + 1, z0 + 1, x1 - x0 - 3, z1 - z0 - 3);
+                            }
+                        }
+                    }
+                    continue;
+                }
                 Optional<SurfacePreview.Surface> surface = preview ? previews.surface(pos) : Optional.empty();
                 g.drawImage(cache.image(model, pos, lod, overlay, surface.orElse(null)), x0, z0, x1 - x0, z1 - z0,
                         null);
@@ -537,10 +745,102 @@ final class MapView {
                 }
             }
         }
-        if (preview) {
-            previews.keepOnly(visibleTiles(width, height));
+    }
+
+    private void paintBounds(Graphics2D g, Workspace workspace, int width, int height) {
+        TileRect bounds = workspace.spec().bounds();
+        Rectangle world = screenRect(bounds);
+        Rectangle view = new Rectangle(0, 0, width, height);
+        Optional<TileRect> area = document.area();
+        Rectangle visibleWorld = world.intersection(view);
+        if (!visibleWorld.isEmpty()) {
+            if (area.isEmpty()) {
+                g.setColor(NO_AREA);
+                g.fill(visibleWorld);
+            } else {
+                Rectangle inside = screenRect(area.get());
+                java.awt.geom.Area dim = new java.awt.geom.Area(visibleWorld);
+                dim.subtract(new java.awt.geom.Area(inside));
+                g.setColor(OUTSIDE_AREA);
+                g.fill(dim);
+            }
         }
-        paintBrush(g, scale);
+        g.setStroke(new BasicStroke(1f));
+        g.setColor(BOUNDS_EDGE);
+        g.draw(world.intersection(new Rectangle(-4, -4, width + 8, height + 8)));
+        if (area.isPresent() && !area.get().equals(bounds)) {
+            g.setColor(AREA_EDGE);
+            g.setStroke(new BasicStroke(2f));
+            g.draw(screenRect(area.get()).intersection(new Rectangle(-4, -4, width + 8, height + 8)));
+            g.setStroke(new BasicStroke(1f));
+        }
+    }
+
+    private void paintSelection(Graphics2D g) {
+        Optional<TileRect> rect = selection.rect();
+        if (rect.isEmpty()) {
+            return;
+        }
+        TileRect r = rect.get();
+        long cost = areaCost.applyAsLong(r);
+        int limit = budget.getAsInt();
+        boolean over = cost > limit;
+        Rectangle box = screenRect(r);
+        g.setColor(SELECTION_FILL);
+        g.fill(box.intersection(new Rectangle(0, 0, canvas.getWidth(), canvas.getHeight())));
+        g.setColor(over ? SELECTION_OVER : SELECTION_EDGE);
+        g.setStroke(new BasicStroke(2f));
+        g.draw(box.intersection(new Rectangle(-4, -4, canvas.getWidth() + 8, canvas.getHeight() + 8)));
+        g.setStroke(new BasicStroke(1f));
+        for (int corner = 0; corner < 4; corner++) {
+            int hx = corner % 2 == 0 ? box.x : box.x + box.width;
+            int hz = corner < 2 ? box.y : box.y + box.height;
+            g.fillRect(hx - HANDLE, hz - HANDLE, 2 * HANDLE, 2 * HANDLE);
+        }
+        String text = messages.text("area.selection", Forms.number(r.width()), Forms.number(r.depth()),
+                Forms.number((long) r.width() * Tile.SIZE), Forms.number((long) r.depth() * Tile.SIZE),
+                Forms.number(cost), Forms.number(limit));
+        String safe = SafeText.neutralize(text);
+        int textWidth = g.getFontMetrics().stringWidth(safe);
+        int lx = Math.clamp(box.x, 8, Math.max(8, canvas.getWidth() - textWidth - 10));
+        int lz = Math.clamp(box.y - 10, 50, Math.max(50, canvas.getHeight() - 8));
+        paintLabel(g, safe, lx, lz, over ? SELECTION_OVER : Color.WHITE);
+    }
+
+    private void paintHint(Graphics2D g, int width, int height, Optional<Workspace> workspace) {
+        String key;
+        if (workspace.isEmpty()) {
+            key = "map.emptyHint";
+        } else if (areaMode) {
+            key = "area.modeHint";
+        } else if (document.area().isEmpty()) {
+            key = "area.noAreaHint";
+        } else {
+            return;
+        }
+        String text = SafeText.neutralize(messages.text(key));
+        int textWidth = g.getFontMetrics().stringWidth(text);
+        paintLabel(g, text, Math.max(8, (width - textWidth) / 2), workspace.isEmpty() ? height / 2 : 24, Color.WHITE);
+    }
+
+    private void paintLabel(Graphics2D g, String text, int x, int baseline, Color color) {
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        java.awt.FontMetrics metrics = g.getFontMetrics();
+        int w = metrics.stringWidth(text);
+        g.setColor(LABEL_BACK);
+        g.fillRoundRect(x - 6, baseline - metrics.getAscent() - 4, w + 12, metrics.getHeight() + 6, 8, 8);
+        g.setColor(color);
+        g.drawString(text, x, baseline);
+    }
+
+    private Rectangle screenRect(TileRect rect) {
+        double x0 = Math.clamp(viewport.screenX(rect.minBlockX()), -1e6, 1e6);
+        double z0 = Math.clamp(viewport.screenZ(rect.minBlockZ()), -1e6, 1e6);
+        double x1 = Math.clamp(viewport.screenX(rect.maxBlockX() + 1.0), -1e6, 1e6);
+        double z1 = Math.clamp(viewport.screenZ(rect.maxBlockZ() + 1.0), -1e6, 1e6);
+        int ix = (int) Math.floor(x0);
+        int iz = (int) Math.floor(z0);
+        return new Rectangle(ix, iz, Math.max(1, (int) Math.floor(x1) - ix), Math.max(1, (int) Math.floor(z1) - iz));
     }
 
     private Set<TilePos> visibleTiles(int width, int height) {
