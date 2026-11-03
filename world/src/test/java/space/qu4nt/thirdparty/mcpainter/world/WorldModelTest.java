@@ -176,6 +176,28 @@ class WorldModelTest {
     }
 
     @Test
+    void usedBiomesListsOnlyPaintedBiomes() {
+        WorldModel model = twoTiles();
+        assertEquals(List.of(WorldModel.DEFAULT_BIOME), model.usedBiomes());
+        try (Edit edit = model.beginEdit("paint")) {
+            edit.setBiome(3, 3, "minecraft:desert");
+            edit.setBiome(200, 3, "mymod:glow/caves");
+            edit.setBiome(200, 3, "minecraft:cherry_grove");
+        }
+        assertEquals(List.of(WorldModel.DEFAULT_BIOME, "minecraft:desert", "minecraft:cherry_grove"),
+                model.usedBiomes());
+        assertEquals(4, model.biomes().size());
+        try (Edit edit = model.beginEdit("remove")) {
+            edit.removeTile(new TilePos(0, 0));
+        }
+        assertEquals(List.of(WorldModel.DEFAULT_BIOME, "minecraft:cherry_grove"), model.usedBiomes());
+        try (Edit edit = model.beginEdit("clear")) {
+            edit.removeTile(new TilePos(1, 0));
+        }
+        assertEquals(List.of(), model.usedBiomes());
+    }
+
+    @Test
     void onlyOneEditAtATime() {
         WorldModel model = twoTiles();
         Edit first = model.beginEdit("first");

@@ -67,6 +67,20 @@ public final class WorldModel {
         return biomes.get(index);
     }
 
+    public List<String> usedBiomes() {
+        boolean[] used = new boolean[biomes.size()];
+        for (Tile tile : tiles.values()) {
+            tile.markBiomes(used);
+        }
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < used.length; i++) {
+            if (used[i]) {
+                result.add(biomes.get(i));
+            }
+        }
+        return result;
+    }
+
     public int tileCount() {
         return tiles.size();
     }

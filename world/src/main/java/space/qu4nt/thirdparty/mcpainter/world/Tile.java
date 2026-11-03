@@ -102,6 +102,17 @@ public final class Tile {
         water[index] = (short) level;
     }
 
+    void markBiomes(boolean[] used) {
+        int last = -1;
+        for (short value : biomes) {
+            int index = value & 0xFFFF;
+            if (index != last) {
+                used[index] = true;
+                last = index;
+            }
+        }
+    }
+
     void setBiome(int index, int biomeIndex) {
         biomes[index] = (short) biomeIndex;
     }
