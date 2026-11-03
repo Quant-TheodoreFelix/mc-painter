@@ -3,6 +3,7 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import javax.swing.JFrame;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.LevelData;
@@ -16,7 +17,7 @@ import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class ProjectActions {
 
-    record WorldInfo(MinecraftWorld world, boolean inUse) {
+    record WorldInfo(MinecraftWorld world, boolean inUse, List<String> usedBiomes) {
     }
 
     private final JFrame frame;
@@ -148,9 +149,10 @@ final class ProjectActions {
             Dialogs.error(frame, messages, messages.text("export.notWorld"), directory.toString());
             return;
         }
+        WorldModel model = document.model();
         BackgroundTask.Outcome<WorldInfo> info = BackgroundTask.run(frame, messages, "task.reading", () -> {
             MinecraftWorld world = MinecraftWorld.open(directory);
-            return new WorldInfo(world, world.isInUse());
+            return new WorldInfo(world, world.isInUse(), model.usedBiomes());
         });
         if (!info.ok()) {
             reportExportFailure(info.error());
@@ -163,10 +165,13 @@ final class ProjectActions {
         LevelData level = info.value().world().level();
         String confirm = messages.text("export.confirm", level.levelName(), level.versionName(),
                 Integer.toString(level.dataVersion()), info.value().world().root().toString());
+        Optional<String> biomes = BiomeCheck.warning(messages, info.value().usedBiomes(), level.dataVersion());
+        if (biomes.isPresent()) {
+            confirm = confirm + "\n\n" + biomes.get();
+        }
         if (!Dialogs.confirm(frame, messages, "export.title", confirm, "dialog.export")) {
             return;
         }
-        WorldModel model = document.model();
         BackgroundTask.Outcome<WorldExporter.Result> exported = BackgroundTask.run(frame, messages,
                 "task.exporting", () -> WorldExporter.export(model, directory));
         if (!exported.ok()) {
