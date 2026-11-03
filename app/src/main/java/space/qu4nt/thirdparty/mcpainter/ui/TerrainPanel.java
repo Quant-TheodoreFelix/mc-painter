@@ -2,6 +2,8 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
@@ -18,6 +20,7 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.VanillaBiomes;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -34,6 +37,7 @@ final class TerrainPanel {
     private final Consumer<String> notice;
     private final JPanel panel = new JPanel(new BorderLayout());
     private final JList<TerrainType> terrains = new JList<>(TerrainType.values());
+    private final JList<Layer> layers = new JList<>(Layer.values());
     private final SpinnerNumberModel waterModel;
     private final JComboBox<String> biomes = new JComboBox<>(BIOMES.toArray(String[]::new));
     private final JTextArea biomeHint = SafeText.message("", NOTE_COLUMNS);
@@ -100,9 +104,35 @@ final class TerrainPanel {
         biomeHint.setFont(biomeHint.getFont().deriveFont(Font.PLAIN, biomeHint.getFont().getSize2D() - 1));
         biomeSection.add(biomeHint, BorderLayout.SOUTH);
 
+        layers.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        layers.setVisibleRowCount(Layer.values().length);
+        layers.setCellRenderer(Renderers.withIcon(l -> messages.text(Labels.layerKey(l)),
+                l -> new Renderers.Swatch(TileRenderer.layerColor(l))));
+        layers.addListSelectionListener(e -> {
+            Layer selected = layers.getSelectedValue();
+            if (!syncing && !e.getValueIsAdjusting() && selected != null) {
+                settings.setLayer(selected);
+                settings.setTool(Tool.LAYER);
+            }
+        });
+        layers.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (!syncing && layers.getSelectedValue() != null) {
+                    settings.setTool(Tool.LAYER);
+                }
+            }
+        });
+        JTextArea layerHint = SafeText.message(messages.text("layer.hint"), NOTE_COLUMNS);
+        layerHint.setFont(layerHint.getFont().deriveFont(Font.PLAIN, layerHint.getFont().getSize2D() - 1));
+        JPanel layerSection = new JPanel(new BorderLayout(0, 4));
+        layerSection.setBorder(ToolPanel.section(messages.text("panel.layers")));
+        layerSection.add(layers, BorderLayout.CENTER);
+        layerSection.add(layerHint, BorderLayout.SOUTH);
+
         JPanel stack = new JPanel();
         stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
-        for (JComponent section : List.of(terrainSection, waterSection, biomeSection)) {
+        for (JComponent section : List.of(terrainSection, waterSection, biomeSection, layerSection)) {
             section.setAlignmentX(0);
             if (stack.getComponentCount() > 0) {
                 stack.add(Box.createVerticalStrut(8));
@@ -150,6 +180,7 @@ final class TerrainPanel {
         syncing = true;
         try {
             terrains.setSelectedValue(settings.terrain(), true);
+            layers.setSelectedValue(settings.layer(), true);
             waterModel.setValue(settings.waterLevel());
             biomes.setSelectedItem(settings.biome());
             SafeText.setText(biomeHint, Labels.biomeHint(messages, settings.biome()));

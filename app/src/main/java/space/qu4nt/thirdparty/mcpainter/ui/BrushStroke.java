@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.SequencedSet;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainOps;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
@@ -16,6 +17,7 @@ import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 final class BrushStroke {
 
     static final float RAISE_PER_DAB = 1.0f;
+    static final float LAYER_PER_DAB = 0.1f;
     static final double PAINT_THRESHOLD = 1e-9;
 
     interface Listener {
@@ -33,6 +35,7 @@ final class BrushStroke {
     private final TerrainType terrain;
     private final int waterLevel;
     private final String biome;
+    private final Layer layer;
     private final boolean autoAddTiles;
     private final Listener listener;
     private float flattenTarget = Float.NaN;
@@ -50,6 +53,7 @@ final class BrushStroke {
         this.terrain = settings.terrain();
         this.waterLevel = settings.waterLevel();
         this.biome = settings.biome();
+        this.layer = settings.layer();
         this.autoAddTiles = settings.autoAddTiles();
         this.listener = listener;
     }
@@ -132,6 +136,8 @@ final class BrushStroke {
             case TERRAIN -> TerrainOps.paintTerrain(edit, x, z, brush, terrain, PAINT_THRESHOLD);
             case WATER -> TerrainOps.setWaterLevel(edit, x, z, brush, waterLevel, PAINT_THRESHOLD);
             case BIOME -> TerrainOps.paintBiome(edit, x, z, brush, biome, PAINT_THRESHOLD);
+            case LAYER -> TerrainOps.sprayLayer(edit, x, z, brush, layer, LAYER_PER_DAB * strength);
+            case LAYER_ERASE -> TerrainOps.sprayLayer(edit, x, z, brush, layer, -LAYER_PER_DAB * strength);
             case ADD_TILES, DELETE_TILES -> {
             }
         }

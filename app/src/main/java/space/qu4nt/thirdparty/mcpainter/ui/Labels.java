@@ -5,6 +5,7 @@ import java.util.Optional;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.DataVersions;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.VanillaBiomes;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 
 final class Labels {
@@ -14,6 +15,14 @@ final class Labels {
 
     static String terrainKey(TerrainType type) {
         return "terrain." + type.id();
+    }
+
+    static String layerKey(Layer layer) {
+        return "layer." + layer.id();
+    }
+
+    static int percent(int layerValue) {
+        return (int) Math.round(layerValue * 100.0 / Layer.MAX_VALUE);
     }
 
     static String biomeKey(VanillaBiomes.Biome biome) {

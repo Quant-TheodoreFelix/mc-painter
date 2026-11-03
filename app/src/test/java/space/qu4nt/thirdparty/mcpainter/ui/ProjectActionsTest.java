@@ -13,7 +13,9 @@ import space.qu4nt.thirdparty.mcpainter.anvil.world.UnsupportedVersionException;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.WorldInUseException;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
+import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 class ProjectActionsTest {
 
@@ -79,6 +81,9 @@ class ProjectActionsTest {
         form.seed().setText("42");
         assertEquals(new Forms.NewWorld(4, 4, 64, 63, TerrainType.GRASS, new GenerationSettings(42)),
                 form.read().orElseThrow());
+        form.initialOres().setSelected(true);
+        assertEquals(new GenerationSettings(42, true), form.read().orElseThrow().generation());
+        form.initialOres().setSelected(false);
         form.seed().setText("mc-painter");
         assertEquals("mc-painter".hashCode(), form.read().orElseThrow().generation().seed());
         for (Component c : form.panel().getComponents()) {
@@ -92,6 +97,12 @@ class ProjectActionsTest {
         Forms.Import options = importForm.read();
         assertEquals(HeightmapImporter.Options.defaults(), options.options());
         assertEquals(-7, options.generation().seed());
+        assertFalse(options.generation().initialOres());
+        WorldModel ores = Worlds.blank(2, 1, 64, 63, TerrainType.GRASS, new GenerationSettings(1, true));
+        assertEquals(Layer.INITIAL_ORE_VALUE, ores.layer(-100, 5, Layer.COAL_ORE));
+        assertEquals(Layer.INITIAL_ORE_VALUE, ores.layer(100, 5, Layer.IRON_ORE));
+        assertEquals(0, ores.layer(100, 5, Layer.OAK_TREES));
+        assertEquals(0, Worlds.blank(1, 1, 64, 63, TerrainType.GRASS).layer(5, 5, Layer.COAL_ORE));
     }
 
     @Test

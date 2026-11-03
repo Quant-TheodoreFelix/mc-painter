@@ -26,6 +26,7 @@ import javax.swing.JComponent;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
@@ -384,6 +385,9 @@ final class MapView {
         bind("OPEN_BRACKET", "radius.down", () -> settings.setRadius(settings.radius() - radiusStep()));
         bind("CLOSE_BRACKET", "radius.up", () -> settings.setRadius(settings.radius() + radiusStep()));
         for (Tool tool : Tool.values()) {
+            if (tool.shortcut() == Tool.NO_SHORTCUT) {
+                continue;
+            }
             bind(Integer.toString(tool.shortcut()), "tool." + tool.name(), () -> settings.setTool(tool));
             bind("NUMPAD" + tool.shortcut(), "tool.numpad." + tool.name(), () -> settings.setTool(tool));
         }
@@ -424,6 +428,8 @@ final class MapView {
         int maxTileX = tileIndex(viewport.worldX(clip.x + clip.width));
         int minTileZ = tileIndex(viewport.worldZ(clip.y));
         int maxTileZ = tileIndex(viewport.worldZ(clip.y + clip.height));
+        Tool active = stroke != null ? stroke.tool() : settings.tool();
+        Layer overlay = active.paintsLayer() ? settings.layer() : null;
         boolean chunkGrid = showGrid && 16 * scale >= GRID_MIN_PIXELS;
         boolean tileGrid = showGrid && Tile.SIZE * scale >= GRID_MIN_PIXELS;
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
@@ -437,7 +443,7 @@ final class MapView {
                 int x1 = screenX(pos.minBlockX() + Tile.SIZE);
                 int z0 = screenZ(pos.minBlockZ());
                 int z1 = screenZ(pos.minBlockZ() + Tile.SIZE);
-                g.drawImage(cache.image(model, pos, lod), x0, z0, x1 - x0, z1 - z0, null);
+                g.drawImage(cache.image(model, pos, lod, overlay), x0, z0, x1 - x0, z1 - z0, null);
                 if (chunkGrid) {
                     g.setColor(CHUNK_LINE);
                     for (int offset = 16; offset < Tile.SIZE; offset += 16) {

@@ -22,6 +22,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.VanillaBiomes;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 
 class MessagesTest {
@@ -71,6 +72,9 @@ class MessagesTest {
             }
             for (Brush.Falloff falloff : Brush.Falloff.values()) {
                 assertTrue(messages.has(Labels.falloffKey(falloff)), falloff.name());
+            }
+            for (Layer layer : Layer.values()) {
+                assertTrue(messages.has(Labels.layerKey(layer)), layer.id());
             }
             for (VanillaBiomes.Biome biome : VanillaBiomes.all()) {
                 assertTrue(messages.has(Labels.biomeKey(biome)), biome.id());

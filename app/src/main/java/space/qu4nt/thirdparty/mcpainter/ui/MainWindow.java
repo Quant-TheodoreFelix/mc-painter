@@ -50,7 +50,7 @@ final class MainWindow {
         this.map = new MapView(document, brush, messages, new MapView.Listener() {
             @Override
             public void hovered(int x, int z) {
-                status.showColumn(document.model(), x, z);
+                status.showColumn(document.model(), x, z, brush.tool().paintsLayer() ? brush.layer() : null);
             }
 
             @Override

@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -15,6 +16,7 @@ import space.qu4nt.thirdparty.mcpainter.io.JsonFileStore;
 import space.qu4nt.thirdparty.mcpainter.io.JsonFormatException;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 
 final class BrushLibrary {
@@ -28,6 +30,7 @@ final class BrushLibrary {
     private static final Set<String> SHAPE_KEYS = Set.of("format", "version", "name", "size", "data");
     private static final Set<String> PRESET_KEYS = Set.of("format", "version", "name", "shape", "tool", "radius",
             "strength", "falloff", "terrain", "biome", "waterLevel", "autoAddTiles");
+    private static final Set<String> PRESET_KEYS_WITH_LAYER = union(PRESET_KEYS, "layer");
 
     record Stored<T>(String file, T value) {
     }
@@ -131,6 +134,7 @@ final class BrushLibrary {
         out.put("biome", preset.biome());
         out.put("waterLevel", preset.waterLevel());
         out.put("autoAddTiles", preset.autoAddTiles());
+        out.put("layer", preset.layer().id());
         return Json.write(out);
     }
 
@@ -166,7 +170,7 @@ final class BrushLibrary {
     }
 
     private static BrushPreset parsePreset(Map<String, Object> object) throws JsonFormatException {
-        requireHeader(object, PRESET_FORMAT, PRESET_KEYS);
+        requireHeader(object, PRESET_FORMAT, object.containsKey("layer") ? PRESET_KEYS_WITH_LAYER : PRESET_KEYS);
         Map<String, Object> shapeObject = asObject(object.get("shape"));
         String type = string(shapeObject, "type");
         BrushShape shape;
@@ -187,7 +191,10 @@ final class BrushLibrary {
             }
             default -> throw new JsonFormatException("unknown shape type");
         }
-        Tool tool = Tool.fromId(string(object, "tool")).orElseThrow(() -> new JsonFormatException("unknown tool"));
+        Tool tool = Tool.fromId(string(object, "tool")).filter(Tool::visible)
+                .orElseThrow(() -> new JsonFormatException("unknown tool"));
+        Layer layer = object.containsKey("layer") ? Layer.fromId(string(object, "layer"))
+                .orElseThrow(() -> new JsonFormatException("unknown layer")) : BrushPreset.DEFAULT_LAYER;
         Brush.Falloff falloff = falloff(string(object, "falloff"));
         TerrainType terrain = TerrainType.fromId(string(object, "terrain"))
                 .orElseThrow(() -> new JsonFormatException("unknown terrain"));
@@ -196,7 +203,7 @@ final class BrushLibrary {
                 integer(object, "strength", BrushSettings.MIN_STRENGTH_PERCENT, 100), falloff, terrain,
                 string(object, "biome"),
                 integer(object, "waterLevel", BrushPreset.MIN_WATER_LEVEL, BrushPreset.MAX_WATER_LEVEL),
-                bool(object, "autoAddTiles"));
+                bool(object, "autoAddTiles"), layer);
     }
 
     private static BrushShape.Mask mask(Map<String, Object> object) throws JsonFormatException {
@@ -235,6 +242,12 @@ final class BrushLibrary {
         if (!Long.valueOf(FORMAT_VERSION).equals(object.get("version"))) {
             throw new JsonFormatException("unsupported brush file version");
         }
+    }
+
+    private static Set<String> union(Set<String> keys, String extra) {
+        Set<String> all = new HashSet<>(keys);
+        all.add(extra);
+        return Set.copyOf(all);
     }
 
     private static void requireKeys(Map<String, Object> object, Set<String> keys) throws JsonFormatException {

@@ -3,10 +3,19 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 import java.util.Objects;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 
 record BrushPreset(String name, BrushShape shape, String shapeName, Tool tool, int radius, int strengthPercent,
-        Brush.Falloff falloff, TerrainType terrain, String biome, int waterLevel, boolean autoAddTiles) {
+        Brush.Falloff falloff, TerrainType terrain, String biome, int waterLevel, boolean autoAddTiles, Layer layer) {
+
+    static final Layer DEFAULT_LAYER = Layer.OAK_TREES;
+
+    BrushPreset(String name, BrushShape shape, String shapeName, Tool tool, int radius, int strengthPercent,
+            Brush.Falloff falloff, TerrainType terrain, String biome, int waterLevel, boolean autoAddTiles) {
+        this(name, shape, shapeName, tool, radius, strengthPercent, falloff, terrain, biome, waterLevel, autoAddTiles,
+                DEFAULT_LAYER);
+    }
 
     static final int MIN_WATER_LEVEL = -4096;
     static final int MAX_WATER_LEVEL = 4096;
@@ -16,6 +25,10 @@ record BrushPreset(String name, BrushShape shape, String shapeName, Tool tool, i
         Objects.requireNonNull(shape, "shape");
         shapeName = shape instanceof BrushShape.Mask ? BrushLibrary.requireName(shapeName) : "";
         Objects.requireNonNull(tool, "tool");
+        if (!tool.visible()) {
+            throw new IllegalArgumentException("tool cannot be stored in a preset");
+        }
+        Objects.requireNonNull(layer, "layer");
         if (radius < 0 || radius > BrushSettings.MAX_RADIUS) {
             throw new IllegalArgumentException("radius out of range");
         }
@@ -33,6 +46,6 @@ record BrushPreset(String name, BrushShape shape, String shapeName, Tool tool, i
     static BrushPreset of(String name, BrushSettings settings, String shapeName) {
         return new BrushPreset(name, settings.shape(), shapeName, settings.tool(), settings.radius(),
                 settings.strengthPercent(), settings.falloff(), settings.terrain(), settings.biome(),
-                settings.waterLevel(), settings.autoAddTiles());
+                settings.waterLevel(), settings.autoAddTiles(), settings.layer());
     }
 }

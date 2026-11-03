@@ -5,6 +5,7 @@ import java.awt.GridBagLayout;
 import java.text.ParseException;
 import java.util.Optional;
 import javax.swing.BorderFactory;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
@@ -39,9 +40,11 @@ final class Forms {
         private final JSpinner sea = spinner(Worlds.SEA_LEVEL, Worlds.MIN_Y, Worlds.MAX_Y);
         private final JComboBox<TerrainType> terrain = new JComboBox<>(TerrainType.values());
         private final JTextField seed = seedField();
+        private final JCheckBox initialOres;
         private final JPanel panel = form();
 
         NewWorldForm(Messages messages) {
+            initialOres = initialOresBox(messages);
             terrain.setRenderer(Renderers.withIcon(t -> messages.text(Labels.terrainKey(t)),
                     t -> new Renderers.Swatch(TileRenderer.terrainColor(t))));
             ToolPanel.addRow(panel, 0, SafeText.label(messages.text("new.width")), width);
@@ -51,7 +54,8 @@ final class Forms {
             ToolPanel.addRow(panel, 4, SafeText.label(messages.text("new.terrain")), terrain);
             ToolPanel.addRow(panel, 5, SafeText.label(messages.text("new.seed")), seed);
             ToolPanel.addWide(panel, 6, SafeText.label(messages.text("new.seedHint")));
-            ToolPanel.addWide(panel, 7, SafeText.label(messages.text("new.heightRange",
+            ToolPanel.addWide(panel, 7, initialOres);
+            ToolPanel.addWide(panel, 8, SafeText.label(messages.text("new.heightRange",
                     Integer.toString(Worlds.MIN_Y), Integer.toString(Worlds.MAX_Y))));
         }
 
@@ -63,6 +67,10 @@ final class Forms {
             return seed;
         }
 
+        JCheckBox initialOres() {
+            return initialOres;
+        }
+
         Optional<NewWorld> read() {
             int w = value(width);
             int d = value(depth);
@@ -70,7 +78,7 @@ final class Forms {
                 return Optional.empty();
             }
             TerrainType type = terrain.getSelectedItem() instanceof TerrainType t ? t : TerrainType.GRASS;
-            return Optional.of(new NewWorld(w, d, value(height), value(sea), type, generation(seed)));
+            return Optional.of(new NewWorld(w, d, value(height), value(sea), type, generation(seed, initialOres)));
         }
     }
 
@@ -81,14 +89,17 @@ final class Forms {
         private final JSpinner high = spinner((int) defaults.high(), defaults.minY(), defaults.maxY());
         private final JSpinner sea = spinner(defaults.seaLevel(), defaults.minY(), defaults.maxY());
         private final JTextField seed = seedField();
+        private final JCheckBox initialOres;
         private final JPanel panel = form();
 
         ImportForm(Messages messages) {
+            initialOres = initialOresBox(messages);
             ToolPanel.addRow(panel, 0, SafeText.label(messages.text("import.low")), low);
             ToolPanel.addRow(panel, 1, SafeText.label(messages.text("import.high")), high);
             ToolPanel.addRow(panel, 2, SafeText.label(messages.text("import.seaLevel")), sea);
             ToolPanel.addRow(panel, 3, SafeText.label(messages.text("new.seed")), seed);
             ToolPanel.addWide(panel, 4, SafeText.label(messages.text("new.seedHint")));
+            ToolPanel.addWide(panel, 5, initialOres);
         }
 
         JPanel panel() {
@@ -99,9 +110,13 @@ final class Forms {
             return seed;
         }
 
+        JCheckBox initialOres() {
+            return initialOres;
+        }
+
         Import read() {
             return new Import(new HeightmapImporter.Options(defaults.minY(), defaults.maxY(), value(sea), value(low),
-                    value(high), defaults.maxTiles()), generation(seed));
+                    value(high), defaults.maxTiles()), generation(seed, initialOres));
         }
     }
 
@@ -134,8 +149,14 @@ final class Forms {
         return SafeText.plain(new JTextField(SEED_COLUMNS));
     }
 
-    private static GenerationSettings generation(JTextField seed) {
-        return new GenerationSettings(Seeds.parse(seed.getText()));
+    private static GenerationSettings generation(JTextField seed, JCheckBox initialOres) {
+        return new GenerationSettings(Seeds.parse(seed.getText()), initialOres.isSelected());
+    }
+
+    private static JCheckBox initialOresBox(Messages messages) {
+        JCheckBox box = SafeText.plain(new JCheckBox(messages.text("new.initialOres")));
+        box.setToolTipText(SafeText.neutralize(messages.text("new.initialOresHint")));
+        return box;
     }
 
     private static JPanel form() {

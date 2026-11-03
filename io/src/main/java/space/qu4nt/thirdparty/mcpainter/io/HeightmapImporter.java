@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -97,7 +98,15 @@ public final class HeightmapImporter {
                         water[i] = (short) options.seaLevel();
                     }
                 }
-                builder.tile(new TilePos(firstTileX + tx, firstTileZ + tz), heights, terrain, water, biomes);
+                TilePos pos = new TilePos(firstTileX + tx, firstTileZ + tz);
+                builder.tile(pos, heights, terrain, water, biomes);
+                if (generation.initialOres()) {
+                    for (Layer layer : Layer.values()) {
+                        if (layer.ore()) {
+                            builder.layerFill(pos, layer, Layer.INITIAL_ORE_VALUE);
+                        }
+                    }
+                }
             }
         }
         return builder.build();

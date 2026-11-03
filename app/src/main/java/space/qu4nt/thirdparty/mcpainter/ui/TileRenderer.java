@@ -3,6 +3,7 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.Objects;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -18,6 +19,8 @@ final class TileRenderer {
     static final int WATER_FULL_DEPTH = 24;
 
     private static final double SLOPE_GAIN = 0.6;
+    static final double OVERLAY_MIN = 0.3;
+    static final double OVERLAY_RANGE = 0.65;
     private static final double SLOPE_LIMIT = 0.45;
 
     private TileRenderer() {
@@ -34,7 +37,21 @@ final class TileRenderer {
         };
     }
 
+    static int layerColor(Layer layer) {
+        return switch (layer) {
+            case COAL_ORE -> 0x1A1A1A;
+            case IRON_ORE -> 0xE0915A;
+            case OAK_TREES -> 0x002A00;
+            case GRASS -> 0xB8F040;
+            case FLOWERS -> 0xF050C8;
+        };
+    }
+
     static BufferedImage render(WorldModel model, TilePos pos, int lod) {
+        return render(model, pos, lod, null);
+    }
+
+    static BufferedImage render(WorldModel model, TilePos pos, int lod, Layer overlay) {
         Objects.checkIndex(lod, MAX_LOD + 1);
         Tile tile = model.tile(pos).orElseThrow(() -> new IllegalArgumentException("no tile at " + pos));
         int step = 1 << lod;
@@ -64,6 +81,12 @@ final class TileRenderer {
                     double shade = 1 + Math.clamp((gx + gz) * SLOPE_GAIN, -SLOPE_LIMIT, SLOPE_LIMIT);
                     double elevation = 0.85 + 0.3 * Math.clamp((height - model.minY()) / range, 0.0, 1.0);
                     color = multiply(ground, shade * elevation);
+                }
+                if (overlay != null) {
+                    int value = tile.layer(overlay, index);
+                    if (value > 0) {
+                        color = mix(color, layerColor(overlay), OVERLAY_MIN + OVERLAY_RANGE * value / Layer.MAX_VALUE);
+                    }
                 }
                 pixels[iz * size + ix] = color;
             }

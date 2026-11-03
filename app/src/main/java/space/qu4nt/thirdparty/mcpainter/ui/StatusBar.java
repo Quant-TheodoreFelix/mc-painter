@@ -9,6 +9,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.Timer;
 import javax.swing.UIManager;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class StatusBar {
@@ -41,14 +42,23 @@ final class StatusBar {
     }
 
     void showColumn(WorldModel model, int x, int z) {
+        showColumn(model, x, z, null);
+    }
+
+    void showColumn(WorldModel model, int x, int z, Layer layer) {
         if (!model.contains(x, z)) {
             SafeText.setText(column, messages.text("status.outside", Integer.toString(x), Integer.toString(z)));
             return;
         }
-        SafeText.setText(column, messages.text("status.column", Integer.toString(x), Integer.toString(z),
+        String text = messages.text("status.column", Integer.toString(x), Integer.toString(z),
                 String.format(Locale.ROOT, "%.1f", model.height(x, z)),
                 messages.text(Labels.terrainKey(model.terrain(x, z))),
-                Integer.toString(model.waterLevel(x, z)), Labels.biomeName(messages, model.biome(x, z))));
+                Integer.toString(model.waterLevel(x, z)), Labels.biomeName(messages, model.biome(x, z)));
+        if (layer != null) {
+            text = text + "    " + messages.text("status.layer", messages.text(Labels.layerKey(layer)),
+                    Integer.toString(Labels.percent(model.layer(x, z, layer))));
+        }
+        SafeText.setText(column, text);
     }
 
     void clearColumn() {

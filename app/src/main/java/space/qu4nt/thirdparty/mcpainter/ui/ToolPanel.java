@@ -53,9 +53,13 @@ final class ToolPanel {
         tools.setBorder(section(messages.text("panel.tools")));
         ButtonGroup group = new ButtonGroup();
         for (Tool tool : Tool.values()) {
+            if (!tool.visible()) {
+                continue;
+            }
             String name = messages.text(tool.messageKey());
             JToggleButton button = SafeText.plain(new JToggleButton(name));
-            button.setToolTipText(messages.text("tool.shortcut", name, Integer.toString(tool.shortcut())));
+            button.setToolTipText(tool.shortcut() == Tool.NO_SHORTCUT ? name
+                    : messages.text("tool.shortcut", name, Integer.toString(tool.shortcut())));
             button.setFocusable(false);
             button.addActionListener(e -> settings.setTool(tool));
             group.add(button);

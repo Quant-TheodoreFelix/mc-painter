@@ -2,6 +2,7 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.util.Arrays;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -39,7 +40,15 @@ final class Worlds {
         int startZ = -(depthTiles / 2);
         for (int z = 0; z < depthTiles; z++) {
             for (int x = 0; x < widthTiles; x++) {
-                builder.tile(new TilePos(startX + x, startZ + z), heights, terrainOrdinals, water, biomes);
+                TilePos pos = new TilePos(startX + x, startZ + z);
+                builder.tile(pos, heights, terrainOrdinals, water, biomes);
+                if (generation.initialOres()) {
+                    for (Layer layer : Layer.values()) {
+                        if (layer.ore()) {
+                            builder.layerFill(pos, layer, Layer.INITIAL_ORE_VALUE);
+                        }
+                    }
+                }
             }
         }
         return builder.build();

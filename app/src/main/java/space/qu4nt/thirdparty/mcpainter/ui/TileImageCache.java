@@ -1,9 +1,12 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.image.BufferedImage;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -11,7 +14,7 @@ final class TileImageCache {
 
     static final long DEFAULT_MAX_BYTES = 128L * 1024 * 1024;
 
-    private record Key(TilePos pos, int lod) {
+    private record Key(TilePos pos, int lod, Layer overlay) {
     }
 
     private final long maxBytes;
@@ -26,12 +29,16 @@ final class TileImageCache {
     }
 
     BufferedImage image(WorldModel model, TilePos pos, int lod) {
-        Key key = new Key(pos, lod);
+        return image(model, pos, lod, null);
+    }
+
+    BufferedImage image(WorldModel model, TilePos pos, int lod, Layer overlay) {
+        Key key = new Key(pos, lod, overlay);
         BufferedImage cached = images.get(key);
         if (cached != null) {
             return cached;
         }
-        BufferedImage image = TileRenderer.render(model, pos, lod);
+        BufferedImage image = TileRenderer.render(model, pos, lod, overlay);
         images.put(key, image);
         bytes += sizeOf(image);
         evictExcept(key);
@@ -39,12 +46,14 @@ final class TileImageCache {
     }
 
     void invalidate(Iterable<TilePos> positions) {
-        for (TilePos pos : positions) {
-            for (int lod = 0; lod <= TileRenderer.MAX_LOD; lod++) {
-                BufferedImage removed = images.remove(new Key(pos, lod));
-                if (removed != null) {
-                    bytes -= sizeOf(removed);
-                }
+        Set<TilePos> stale = new HashSet<>();
+        positions.forEach(stale::add);
+        Iterator<Map.Entry<Key, BufferedImage>> entries = images.entrySet().iterator();
+        while (entries.hasNext()) {
+            Map.Entry<Key, BufferedImage> entry = entries.next();
+            if (stale.contains(entry.getKey().pos())) {
+                bytes -= sizeOf(entry.getValue());
+                entries.remove();
             }
         }
     }

@@ -3,22 +3,28 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 import java.util.Optional;
 
 enum Tool {
-    RAISE("raise", true),
-    LOWER("lower", true),
-    SMOOTH("smooth", true),
-    FLATTEN("flatten", true),
-    TERRAIN("terrain", false),
-    WATER("water", false),
-    BIOME("biome", false),
-    ADD_TILES("addTiles", false),
-    DELETE_TILES("deleteTiles", false);
+    RAISE("raise", true, true),
+    LOWER("lower", true, true),
+    SMOOTH("smooth", true, true),
+    FLATTEN("flatten", true, true),
+    TERRAIN("terrain", false, true),
+    WATER("water", false, true),
+    BIOME("biome", false, true),
+    ADD_TILES("addTiles", false, true),
+    DELETE_TILES("deleteTiles", false, true),
+    LAYER("layer", true, true),
+    LAYER_ERASE("layerErase", true, false);
+
+    static final int NO_SHORTCUT = -1;
 
     private final String key;
-    private final boolean shapesHeight;
+    private final boolean continuous;
+    private final boolean visible;
 
-    Tool(String key, boolean shapesHeight) {
+    Tool(String key, boolean continuous, boolean visible) {
         this.key = key;
-        this.shapesHeight = shapesHeight;
+        this.continuous = continuous;
+        this.visible = visible;
     }
 
     String messageKey() {
@@ -39,11 +45,19 @@ enum Tool {
     }
 
     boolean continuous() {
-        return shapesHeight;
+        return continuous;
     }
 
     boolean usesStrength() {
-        return shapesHeight;
+        return continuous;
+    }
+
+    boolean visible() {
+        return visible;
+    }
+
+    boolean paintsLayer() {
+        return this == LAYER || this == LAYER_ERASE;
     }
 
     Optional<Tool> inverse() {
@@ -52,6 +66,8 @@ enum Tool {
             case LOWER -> Optional.of(RAISE);
             case ADD_TILES -> Optional.of(DELETE_TILES);
             case DELETE_TILES -> Optional.of(ADD_TILES);
+            case LAYER -> Optional.of(LAYER_ERASE);
+            case LAYER_ERASE -> Optional.of(LAYER);
             default -> Optional.empty();
         };
     }
@@ -61,6 +77,10 @@ enum Tool {
     }
 
     int shortcut() {
-        return ordinal() + 1;
+        if (!visible) {
+            return NO_SHORTCUT;
+        }
+        int number = ordinal() + 1;
+        return number < 10 ? number : number == 10 ? 0 : NO_SHORTCUT;
     }
 }

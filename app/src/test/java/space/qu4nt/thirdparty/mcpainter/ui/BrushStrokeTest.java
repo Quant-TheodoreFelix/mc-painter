@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
@@ -188,6 +189,32 @@ class BrushStrokeTest {
         assertTrue(model.undo());
         assertEquals(start, model.tilePositions());
         assertEquals(before, model.revision());
+    }
+
+    @Test
+    void paintsAndErasesTheSelectedLayer() {
+        WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
+        BrushSettings paint = settings(Tool.LAYER, 3);
+        paint.setLayer(Layer.FLOWERS);
+        BrushStroke stroke = BrushStroke.begin(model, paint, Tool.LAYER, "l", 10, 10, listener);
+        int once = model.layer(10, 10, Layer.FLOWERS);
+        assertEquals(Math.round(BrushStroke.LAYER_PER_DAB * Layer.MAX_VALUE), once);
+        stroke.repeat();
+        stroke.repeat();
+        stroke.finish();
+        assertEquals(3 * once, model.layer(10, 10, Layer.FLOWERS));
+        assertEquals(0, model.layer(10, 10, Layer.GRASS));
+        assertEquals(Tool.LAYER_ERASE, Tool.LAYER.inverse().orElseThrow());
+        BrushStroke erase = BrushStroke.begin(model, paint, Tool.LAYER_ERASE, "e", 10, 10, listener);
+        erase.finish();
+        assertEquals(2 * once, model.layer(10, 10, Layer.FLOWERS));
+        model.undo();
+        model.undo();
+        assertEquals(0, model.layer(10, 10, Layer.FLOWERS));
+        assertEquals(0, Tool.LAYER.shortcut());
+        assertEquals(Tool.NO_SHORTCUT, Tool.LAYER_ERASE.shortcut());
+        assertFalse(Tool.LAYER_ERASE.visible());
+        assertEquals(9, Tool.DELETE_TILES.shortcut());
     }
 
     @Test

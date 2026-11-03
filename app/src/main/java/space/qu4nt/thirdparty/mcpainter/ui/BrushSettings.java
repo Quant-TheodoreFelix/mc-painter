@@ -6,6 +6,7 @@ import java.util.Objects;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -25,6 +26,7 @@ final class BrushSettings {
     private String biome = WorldModel.DEFAULT_BIOME;
     private boolean autoAddTiles;
     private BrushShape shape = BrushShape.CIRCLE;
+    private Layer layer = Layer.OAK_TREES;
     private final List<Runnable> listeners = new ArrayList<>();
 
     void addListener(Runnable listener) {
@@ -146,7 +148,20 @@ final class BrushSettings {
         }
     }
 
+    Layer layer() {
+        return layer;
+    }
+
+    void setLayer(Layer value) {
+        Objects.requireNonNull(value, "layer");
+        if (value != layer) {
+            layer = value;
+            fire();
+        }
+    }
+
     void apply(BrushPreset preset, int minWaterLevel, int maxWaterLevel) {
+        layer = preset.layer();
         tool = preset.tool();
         radius = preset.radius();
         strengthPercent = preset.strengthPercent();

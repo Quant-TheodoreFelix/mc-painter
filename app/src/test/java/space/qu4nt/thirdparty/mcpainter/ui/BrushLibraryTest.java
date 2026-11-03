@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -60,6 +61,22 @@ class BrushLibraryTest {
     }
 
     @Test
+    void presetsKeepTheLayerAndOlderFilesWithoutItStillLoad() throws IOException {
+        BrushPreset flowers = new BrushPreset("꽃밭", BrushShape.CIRCLE, "", Tool.LAYER, 30, 60, Brush.Falloff.SMOOTH,
+                TerrainType.GRASS, "flower_forest", 63, false, Layer.FLOWERS);
+        assertEquals(flowers, BrushLibrary.parse(BrushLibrary.toJson(flowers)));
+        String old = BrushLibrary.toJson(preset(BrushShape.CIRCLE)).replace(",\n  \"layer\": \"oakTrees\"", "");
+        assertFalse(old.contains("layer"), old);
+        assertEquals(BrushPreset.DEFAULT_LAYER, ((BrushPreset) BrushLibrary.parse(old)).layer());
+        assertThrows(IllegalArgumentException.class, () -> new BrushPreset("x", BrushShape.CIRCLE, "",
+                Tool.LAYER_ERASE, 3, 50, Brush.Falloff.SMOOTH, TerrainType.GRASS, "plains", 63, false));
+        BrushSettings settings = new BrushSettings();
+        settings.apply(flowers, -64, 320);
+        assertEquals(Layer.FLOWERS, settings.layer());
+        assertEquals(Tool.LAYER, settings.tool());
+    }
+
+    @Test
     void countsUnreadableFilesInsteadOfFailing() throws IOException {
         BrushLibrary library = new BrushLibrary(dir);
         library.savePreset(preset(BrushShape.CIRCLE));
@@ -102,6 +119,9 @@ class BrushLibraryTest {
             {"\"size\": 3", "\"size\": 4"},
             {"\"size\": 3", "\"size\": 0"},
             {"\"size\": 3", "\"size\": 513"},
+            {"\"layer\": \"oakTrees\"", "\"layer\": \"gold\""},
+            {"\"layer\": \"oakTrees\"", "\"layer\": 1"},
+            {"\"tool\": \"flatten\"", "\"tool\": \"layerErase\""},
         };
         for (String[] mutation : mutations) {
             assertTrue(good.contains(mutation[0]), mutation[0]);
