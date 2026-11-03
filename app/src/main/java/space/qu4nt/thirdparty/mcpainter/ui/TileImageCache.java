@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import space.qu4nt.thirdparty.mcpainter.io.SurfacePreview;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
@@ -15,7 +16,7 @@ final class TileImageCache {
 
     static final long DEFAULT_MAX_BYTES = 128L * 1024 * 1024;
 
-    private record Key(TilePos pos, int lod, List<Layer> overlay) {
+    private record Key(TilePos pos, int lod, List<Layer> overlay, SurfacePreview.Surface surface) {
     }
 
     private final long maxBytes;
@@ -34,12 +35,18 @@ final class TileImageCache {
     }
 
     BufferedImage image(WorldModel model, TilePos pos, int lod, List<Layer> overlay) {
-        Key key = new Key(pos, lod, List.copyOf(overlay));
+        return image(model, pos, lod, overlay, null);
+    }
+
+    BufferedImage image(WorldModel model, TilePos pos, int lod, List<Layer> overlay, SurfacePreview.Surface surface) {
+        Key key = new Key(pos, lod, List.copyOf(overlay), surface);
         BufferedImage cached = images.get(key);
         if (cached != null) {
             return cached;
         }
-        BufferedImage image = TileRenderer.render(model, pos, lod, key.overlay());
+        BufferedImage image = surface == null ? TileRenderer.render(model, pos, lod, key.overlay())
+                : PreviewRenderer.render(surface, model.tile(pos).orElseThrow(
+                        () -> new IllegalArgumentException("no tile at " + pos)), lod, key.overlay());
         images.put(key, image);
         bytes += sizeOf(image);
         evictExcept(key);

@@ -15,12 +15,15 @@ public final class SurfacePreview {
 
     public static final class Surface {
 
-        private final TilePos pos;
-        private final Block[] blocks;
-        private final int[] heights;
-        private final int[] waterDepths;
+        public static final long BYTES = (long) Tile.SIZE * (Tile.SIZE + 1) * 4;
+        private static final Block[] BLOCKS = Block.values();
 
-        private Surface(TilePos pos, Block[] blocks, int[] heights, int[] waterDepths) {
+        private final TilePos pos;
+        private final byte[] blocks;
+        private final short[] heights;
+        private final byte[] waterDepths;
+
+        private Surface(TilePos pos, byte[] blocks, short[] heights, byte[] waterDepths) {
             this.pos = pos;
             this.blocks = blocks;
             this.heights = heights;
@@ -32,15 +35,15 @@ public final class SurfacePreview {
         }
 
         public boolean known(int localX, int localZ) {
-            return blocks[index(localX, localZ)] != null;
+            return blocks[index(localX, localZ)] != 0;
         }
 
         public Block block(int localX, int localZ) {
-            Block block = blocks[index(localX, localZ)];
-            if (block == null) {
+            int code = blocks[index(localX, localZ)] & 0xFF;
+            if (code == 0) {
                 throw new IllegalStateException("no surface north of " + pos);
             }
-            return block;
+            return BLOCKS[code - 1];
         }
 
         public int height(int localX, int localZ) {
@@ -58,6 +61,12 @@ public final class SurfacePreview {
         }
     }
 
+    static {
+        if (Block.values().length >= 255) {
+            throw new ExceptionInInitializerError("too many blocks for the preview encoding");
+        }
+    }
+
     private SurfacePreview() {
     }
 
@@ -66,11 +75,14 @@ public final class SurfacePreview {
         if (model.tile(Objects.requireNonNull(pos, "pos")).isEmpty()) {
             throw new IllegalArgumentException("no tile at " + pos);
         }
+        if (model.minY() < Short.MIN_VALUE || model.maxY() > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("height range too large for the preview");
+        }
         BlockCatalog catalog = new BlockCatalog(DATA_VERSION);
         int area = Tile.SIZE * (Tile.SIZE + 1);
-        Block[] blocks = new Block[area];
-        int[] heights = new int[area];
-        int[] depths = new int[area];
+        byte[] blocks = new byte[area];
+        short[] heights = new short[area];
+        byte[] depths = new byte[area];
         int firstChunkX = pos.x() * CHUNKS;
         int firstChunkZ = pos.z() * CHUNKS;
         boolean north = model.tile(new TilePos(pos.x(), pos.z() - 1)).isPresent();
@@ -107,9 +119,9 @@ public final class SurfacePreview {
                             block = lookup(catalog, topState[column]);
                         }
                         int index = Surface.index(x - pos.minBlockX(), z - pos.minBlockZ());
-                        blocks[index] = block;
-                        heights[index] = y;
-                        depths[index] = depth;
+                        blocks[index] = (byte) (block.ordinal() + 1);
+                        heights[index] = (short) y;
+                        depths[index] = (byte) Math.min(depth, Byte.MAX_VALUE);
                     }
                 }
             }

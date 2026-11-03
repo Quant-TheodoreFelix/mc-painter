@@ -19,15 +19,19 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.SequencedSet;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import javax.swing.AbstractAction;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import space.qu4nt.thirdparty.mcpainter.io.SurfacePreview;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -67,6 +71,8 @@ final class MapView {
     private final Listener listener;
     private final Viewport viewport = new Viewport();
     private final TileImageCache cache = new TileImageCache(TileImageCache.DEFAULT_MAX_BYTES);
+    private final PreviewCache previews;
+    private boolean preview;
     private final JComponent canvas;
     private final Timer repeat;
     private final BrushStroke.Listener strokeListener;
@@ -102,10 +108,17 @@ final class MapView {
         canvas.setPreferredSize(new Dimension(900, 640));
         canvas.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
         repeat = new Timer(REPEAT_MILLIS, e -> repeatStroke());
+        ExecutorService pool = PreviewCache.workerPool();
+        previews = new PreviewCache(document::model, pool, SwingUtilities::invokeLater, SurfacePreview::render,
+                pos -> {
+                    cache.invalidate(List.of(pos));
+                    canvas.repaint();
+                }, 2 * PreviewCache.threads(pool), PreviewCache.DEFAULT_MAX_BYTES);
         strokeListener = new BrushStroke.Listener() {
             @Override
             public void changed(SequencedSet<TilePos> tiles) {
                 cache.invalidate(tiles);
+                previews.invalidate(tiles);
                 canvas.repaint();
             }
 
@@ -167,6 +180,7 @@ final class MapView {
         document.onModelReplaced(() -> {
             finishStroke();
             cache.clear();
+            previews.clear();
             fitToWorld();
         });
     }
@@ -204,7 +218,22 @@ final class MapView {
 
     void invalidateAll() {
         cache.clear();
+        previews.invalidateAll();
         canvas.repaint();
+    }
+
+    boolean preview() {
+        return preview;
+    }
+
+    void setPreview(boolean value) {
+        if (value != preview) {
+            preview = value;
+            if (!value) {
+                previews.keepOnly(Set.of());
+            }
+            canvas.repaint();
+        }
     }
 
     void zoomIn() {
@@ -483,7 +512,9 @@ final class MapView {
                 int x1 = screenX(pos.minBlockX() + Tile.SIZE);
                 int z0 = screenZ(pos.minBlockZ());
                 int z1 = screenZ(pos.minBlockZ() + Tile.SIZE);
-                g.drawImage(cache.image(model, pos, lod, overlay), x0, z0, x1 - x0, z1 - z0, null);
+                Optional<SurfacePreview.Surface> surface = preview ? previews.surface(pos) : Optional.empty();
+                g.drawImage(cache.image(model, pos, lod, overlay, surface.orElse(null)), x0, z0, x1 - x0, z1 - z0,
+                        null);
                 if (chunkGrid) {
                     g.setColor(chunkLine);
                     for (int offset = 16; offset < Tile.SIZE; offset += 16) {
@@ -499,7 +530,24 @@ final class MapView {
                 }
             }
         }
+        if (preview) {
+            previews.keepOnly(visibleTiles(width, height));
+        }
         paintBrush(g, scale);
+    }
+
+    private Set<TilePos> visibleTiles(int width, int height) {
+        Set<TilePos> visible = new HashSet<>();
+        int minX = tileIndex(viewport.worldX(0));
+        int maxX = tileIndex(viewport.worldX(width));
+        int minZ = tileIndex(viewport.worldZ(0));
+        int maxZ = tileIndex(viewport.worldZ(height));
+        for (int tz = minZ; tz <= maxZ; tz++) {
+            for (int tx = minX; tx <= maxX; tx++) {
+                visible.add(new TilePos(tx, tz));
+            }
+        }
+        return visible;
     }
 
     private void paintBrush(Graphics2D g, double scale) {

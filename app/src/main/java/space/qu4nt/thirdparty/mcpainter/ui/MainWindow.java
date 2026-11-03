@@ -77,6 +77,7 @@ final class MainWindow {
             }
         });
         map.setGridOpacity(settings.chunkGridOpacity(), settings.tileGridOpacity());
+        map.setPreview(settings.preview());
         this.project = new ProjectActions(frame, messages, document, map);
         this.undoItem = item("menu.edit.undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), this::undo);
         this.redoItem = item("menu.edit.redo",
@@ -184,6 +185,12 @@ final class MainWindow {
         gridItem = grid;
         view.add(grid);
         view.add(item("menu.view.gridSettings", null, this::gridSettings));
+        JCheckBoxMenuItem preview = SafeText.plain(new JCheckBoxMenuItem(messages.text("menu.view.preview"),
+                map.preview()));
+        preview.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_P, menuMask | InputEvent.SHIFT_DOWN_MASK));
+        preview.setToolTipText(SafeText.neutralize(messages.text("menu.view.previewHint")));
+        preview.addActionListener(e -> setPreview(preview.isSelected()));
+        view.add(preview);
         view.addSeparator();
         view.add(item("menu.view.zoomIn", KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, menuMask), map::zoomIn));
         view.add(item("menu.view.zoomOut", KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, menuMask), map::zoomOut));
@@ -284,7 +291,17 @@ final class MainWindow {
         try (Edit edit = model.beginEdit(messages.text("seed.edit"))) {
             edit.setGeneration(model.generation().withSeed(seed));
         }
+        map.invalidateAll();
         document.changed();
+    }
+
+    private void setPreview(boolean value) {
+        map.setPreview(value);
+        try {
+            settings.setPreview(value);
+        } catch (BackingStoreException | RuntimeException e) {
+            status.notice(messages.text("error.settings"));
+        }
     }
 
     private void gridSettings() {
