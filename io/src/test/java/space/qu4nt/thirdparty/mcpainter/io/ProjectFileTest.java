@@ -173,6 +173,29 @@ class ProjectFileTest {
         assertRejected(container(withIntFlag(), end()));
     }
 
+    @Test
+    void readsVersionTwoFlowerLayersAsDandelionAndPoppy() throws IOException {
+        byte[] flowers = new byte[Tile.AREA];
+        flowers[7] = (byte) 180;
+        byte[] v2 = container(2, record(ProjectFile.RECORD_HEADER, header(5)), record(ProjectFile.RECORD_TILE,
+                tile(0, 0, 0, Float.floatToIntBits(70), layers("flowers", ByteArrayTag.of(flowers),
+                        "grass", new IntTag(40)))), end());
+        WorldModel loaded = ProjectFile.load(Files.write(dir.resolve("v2" + ProjectFile.EXTENSION), v2));
+        assertEquals(180, loaded.layer(7, 0, Layer.DANDELION));
+        assertEquals(180, loaded.layer(7, 0, Layer.POPPY));
+        assertEquals(0, loaded.layer(8, 0, Layer.POPPY));
+        assertEquals(40, loaded.layer(8, 0, Layer.GRASS));
+        assertRejected(container(2, record(ProjectFile.RECORD_HEADER, header(5)), record(ProjectFile.RECORD_TILE,
+                tile(0, 0, 0, Float.floatToIntBits(70), layers("poppy", new IntTag(1)))), end()));
+        assertRejected(container(record(ProjectFile.RECORD_HEADER, header(5)), record(ProjectFile.RECORD_TILE,
+                tile(0, 0, 0, Float.floatToIntBits(70), layers("flowers", new IntTag(1)))), end()));
+        Path saved = dir.resolve("v3" + ProjectFile.EXTENSION);
+        ProjectFile.save(loaded, saved);
+        WorldModel again = ProjectFile.load(saved);
+        assertEquals(180, again.layer(7, 0, Layer.POPPY));
+        assertEquals(java.util.Set.of(Layer.DANDELION, Layer.POPPY, Layer.GRASS), again.usedLayers());
+    }
+
     private static CompoundTag layers(Object... entries) {
         CompoundTag.Builder builder = CompoundTag.builder();
         for (int i = 0; i < entries.length; i += 2) {

@@ -35,7 +35,7 @@ final class BrushStroke {
     private final TerrainType terrain;
     private final int waterLevel;
     private final String biome;
-    private final Layer layer;
+    private final List<Layer> layers;
     private final boolean autoAddTiles;
     private final Listener listener;
     private float flattenTarget = Float.NaN;
@@ -53,7 +53,7 @@ final class BrushStroke {
         this.terrain = settings.terrain();
         this.waterLevel = settings.waterLevel();
         this.biome = settings.biome();
-        this.layer = settings.layer();
+        this.layers = settings.paintLayers();
         this.autoAddTiles = settings.autoAddTiles();
         this.listener = listener;
     }
@@ -136,13 +136,19 @@ final class BrushStroke {
             case TERRAIN -> TerrainOps.paintTerrain(edit, x, z, brush, terrain, PAINT_THRESHOLD);
             case WATER -> TerrainOps.setWaterLevel(edit, x, z, brush, waterLevel, PAINT_THRESHOLD);
             case BIOME -> TerrainOps.paintBiome(edit, x, z, brush, biome, PAINT_THRESHOLD);
-            case LAYER -> TerrainOps.sprayLayer(edit, x, z, brush, layer, LAYER_PER_DAB * strength);
-            case LAYER_ERASE -> TerrainOps.sprayLayer(edit, x, z, brush, layer, -LAYER_PER_DAB * strength);
+            case LAYER -> spray(x, z, LAYER_PER_DAB * strength);
+            case LAYER_ERASE -> spray(x, z, -LAYER_PER_DAB * strength);
             case ADD_TILES, DELETE_TILES -> {
             }
         }
         int margin = brush.radius() + (added || removed ? Tile.SIZE : TileRenderer.SHADE_MARGIN);
         listener.changed(tilesAround(x, z, margin));
+    }
+
+    private void spray(int x, int z, float amount) {
+        for (Layer layer : layers) {
+            TerrainOps.sprayLayer(edit, x, z, brush, layer, amount);
+        }
     }
 
     private boolean addTiles(int x, int z) {

@@ -100,7 +100,7 @@ class TileRendererTest {
             edit.setLayer(11, 10, Layer.OAK_TREES, 40);
         }
         BufferedImage plain = TileRenderer.render(model, new TilePos(0, 0), 0);
-        BufferedImage tinted = TileRenderer.render(model, new TilePos(0, 0), 0, Layer.OAK_TREES);
+        BufferedImage tinted = TileRenderer.render(model, new TilePos(0, 0), 0, List.of(Layer.OAK_TREES));
         int base = plain.getRGB(10, 10) & 0xFFFFFF;
         assertEquals(base, tinted.getRGB(30, 30) & 0xFFFFFF);
         int full = tinted.getRGB(10, 10) & 0xFFFFFF;
@@ -110,11 +110,31 @@ class TileRendererTest {
         assertTrue(full != light && light != base);
         TileImageCache cache = new TileImageCache(TileImageCache.DEFAULT_MAX_BYTES);
         BufferedImage none = cache.image(model, new TilePos(0, 0), 0);
-        BufferedImage trees = cache.image(model, new TilePos(0, 0), 0, Layer.OAK_TREES);
+        BufferedImage trees = cache.image(model, new TilePos(0, 0), 0, List.of(Layer.OAK_TREES));
         assertTrue(none != trees);
-        assertSame(trees, cache.image(model, new TilePos(0, 0), 0, Layer.OAK_TREES));
+        assertSame(trees, cache.image(model, new TilePos(0, 0), 0, new java.util.ArrayList<>(List.of(Layer.OAK_TREES))));
         cache.invalidate(List.of(new TilePos(0, 0)));
         assertEquals(0, cache.size());
+    }
+
+    @Test
+    void flowerGroupsShowTheStrongestSelectedFlower() {
+        WorldModel model = flat();
+        try (Edit edit = model.beginEdit("flowers")) {
+            edit.setLayer(10, 10, Layer.POPPY, Layer.MAX_VALUE);
+            edit.setLayer(11, 10, Layer.CORNFLOWER, Layer.MAX_VALUE);
+            edit.setLayer(12, 10, Layer.LILAC, Layer.MAX_VALUE);
+        }
+        int base = TileRenderer.render(model, new TilePos(0, 0), 0).getRGB(10, 10) & 0xFFFFFF;
+        BufferedImage group = TileRenderer.render(model, new TilePos(0, 0), 0, List.of(Layer.POPPY, Layer.CORNFLOWER));
+        int mixed = TileRenderer.mix(base, TileRenderer.FLOWER_MIX, TileRenderer.OVERLAY_MIN + TileRenderer.OVERLAY_RANGE);
+        assertEquals(mixed, group.getRGB(10, 10) & 0xFFFFFF);
+        assertEquals(mixed, group.getRGB(11, 10) & 0xFFFFFF);
+        assertEquals(base, group.getRGB(12, 10) & 0xFFFFFF);
+        BufferedImage single = TileRenderer.render(model, new TilePos(0, 0), 0, List.of(Layer.CORNFLOWER));
+        assertEquals(TileRenderer.mix(base, TileRenderer.layerColor(Layer.CORNFLOWER),
+                TileRenderer.OVERLAY_MIN + TileRenderer.OVERLAY_RANGE), single.getRGB(11, 10) & 0xFFFFFF);
+        assertEquals(base, single.getRGB(10, 10) & 0xFFFFFF);
     }
 
     @Test

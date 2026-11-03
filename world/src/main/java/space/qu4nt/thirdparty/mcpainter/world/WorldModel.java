@@ -2,11 +2,13 @@ package space.qu4nt.thirdparty.mcpainter.world;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 public final class WorldModel {
@@ -86,6 +88,19 @@ public final class WorldModel {
             }
         }
         return result;
+    }
+
+    public Set<Layer> usedLayers() {
+        Set<Layer> used = EnumSet.noneOf(Layer.class);
+        for (Layer layer : Layer.values()) {
+            for (Tile tile : tiles.values()) {
+                if (!tile.layerEmpty(layer)) {
+                    used.add(layer);
+                    break;
+                }
+            }
+        }
+        return used;
     }
 
     public int tileCount() {

@@ -2,6 +2,7 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.util.List;
 import java.util.Locale;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
@@ -42,10 +43,10 @@ final class StatusBar {
     }
 
     void showColumn(WorldModel model, int x, int z) {
-        showColumn(model, x, z, null);
+        showColumn(model, x, z, List.of());
     }
 
-    void showColumn(WorldModel model, int x, int z, Layer layer) {
+    void showColumn(WorldModel model, int x, int z, List<Layer> layers) {
         if (!model.contains(x, z)) {
             SafeText.setText(column, messages.text("status.outside", Integer.toString(x), Integer.toString(z)));
             return;
@@ -54,9 +55,13 @@ final class StatusBar {
                 String.format(Locale.ROOT, "%.1f", model.height(x, z)),
                 messages.text(Labels.terrainKey(model.terrain(x, z))),
                 Integer.toString(model.waterLevel(x, z)), Labels.biomeName(messages, model.biome(x, z)));
-        if (layer != null) {
-            text = text + "    " + messages.text("status.layer", messages.text(Labels.layerKey(layer)),
-                    Integer.toString(Labels.percent(model.layer(x, z, layer))));
+        if (!layers.isEmpty()) {
+            int value = 0;
+            for (Layer layer : layers) {
+                value = Math.max(value, model.layer(x, z, layer));
+            }
+            text = text + "    " + messages.text("status.layer", Labels.layerSelection(messages, layers),
+                    Integer.toString(Labels.percent(value)));
         }
         SafeText.setText(column, text);
     }

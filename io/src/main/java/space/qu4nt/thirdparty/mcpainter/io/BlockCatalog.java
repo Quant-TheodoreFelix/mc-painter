@@ -52,7 +52,28 @@ public final class BlockCatalog {
                 Form.of(DataVersions.V1_20_3, DataVersions.MAX_SUPPORTED, "short_grass")),
         TALL_GRASS(BlockTraits.PLANT, always("tall_grass", "half", "lower")),
         DANDELION(BlockTraits.PLANT, always("dandelion")),
-        POPPY(BlockTraits.PLANT, always("poppy"));
+        POPPY(BlockTraits.PLANT, always("poppy")),
+        BLUE_ORCHID(BlockTraits.PLANT, always("blue_orchid")),
+        ALLIUM(BlockTraits.PLANT, always("allium")),
+        AZURE_BLUET(BlockTraits.PLANT, always("azure_bluet")),
+        RED_TULIP(BlockTraits.PLANT, always("red_tulip")),
+        ORANGE_TULIP(BlockTraits.PLANT, always("orange_tulip")),
+        WHITE_TULIP(BlockTraits.PLANT, always("white_tulip")),
+        PINK_TULIP(BlockTraits.PLANT, always("pink_tulip")),
+        OXEYE_DAISY(BlockTraits.PLANT, always("oxeye_daisy")),
+        CORNFLOWER(BlockTraits.PLANT, always("cornflower")),
+        LILY_OF_THE_VALLEY(BlockTraits.PLANT, always("lily_of_the_valley")),
+        SUNFLOWER(BlockTraits.PLANT, always("sunflower", "half", "lower")),
+        LILAC(BlockTraits.PLANT, always("lilac", "half", "lower")),
+        ROSE_BUSH(BlockTraits.PLANT, always("rose_bush", "half", "lower")),
+        PEONY(BlockTraits.PLANT, always("peony", "half", "lower")),
+        TORCHFLOWER(BlockTraits.PLANT, since(DataVersions.V1_20, "torchflower")),
+        PINK_PETALS(BlockTraits.PLANT,
+                since(DataVersions.V1_20, "pink_petals", "facing", "north", "flower_amount", "1")),
+        PITCHER_PLANT(BlockTraits.PLANT, since(DataVersions.V1_20, "pitcher_plant", "half", "lower")),
+        CLOSED_EYEBLOSSOM(BlockTraits.PLANT, since(DataVersions.V1_21_4, "closed_eyeblossom")),
+        WILDFLOWERS(BlockTraits.PLANT,
+                since(DataVersions.V1_21_5, "wildflowers", "facing", "north", "flower_amount", "1"));
 
         private final BlockTraits traits;
         private final List<Form> forms;
@@ -66,6 +87,14 @@ public final class BlockCatalog {
             return traits;
         }
 
+        public int since() {
+            int earliest = Integer.MAX_VALUE;
+            for (Form form : forms) {
+                earliest = Math.min(earliest, form.from());
+            }
+            return earliest;
+        }
+
         Form form(int dataVersion) {
             for (Form form : forms) {
                 if (form.covers(dataVersion)) {
@@ -76,11 +105,15 @@ public final class BlockCatalog {
         }
 
         private static Form always(String path, String... properties) {
-            return Form.of(DataVersions.MIN_SUPPORTED, DataVersions.MAX_SUPPORTED, path, properties);
+            return since(DataVersions.MIN_SUPPORTED, path, properties);
+        }
+
+        private static Form since(int from, String path, String... properties) {
+            return Form.of(from, DataVersions.MAX_SUPPORTED, path, properties);
         }
     }
 
-    private record Variant(Block block, String property, String value) {
+    private record Variant(Block block, Map<String, String> properties) {
     }
 
     private final int dataVersion;
@@ -122,16 +155,24 @@ public final class BlockCatalog {
     }
 
     public BlockStateEntry state(Block block, String property, String value) {
-        Objects.requireNonNull(property, "property");
-        Objects.requireNonNull(value, "value");
+        return state(block, Map.of(Objects.requireNonNull(property, "property"), Objects.requireNonNull(value, "value")));
+    }
+
+    public BlockStateEntry state(Block block, Map<String, String> overrides) {
         BlockStateEntry base = state(block);
         Form form = forms.get(block);
-        if (!form.properties().containsKey(property)) {
-            throw new IllegalArgumentException(block + " has no property " + property);
+        for (Map.Entry<String, String> entry : overrides.entrySet()) {
+            if (!form.properties().containsKey(entry.getKey())) {
+                throw new IllegalArgumentException(block + " has no property " + entry.getKey());
+            }
+            Objects.requireNonNull(entry.getValue(), "value");
         }
-        return variants.computeIfAbsent(new Variant(block, property, value), key -> {
+        if (overrides.isEmpty()) {
+            return base;
+        }
+        return variants.computeIfAbsent(new Variant(block, Map.copyOf(overrides)), key -> {
             Map<String, String> properties = new LinkedHashMap<>(form.properties());
-            properties.put(property, value);
+            properties.putAll(key.properties());
             BlockStateEntry state = BlockStateEntry.of(base.id(), properties);
             traits.put(state, block.traits());
             return state;

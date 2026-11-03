@@ -19,6 +19,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
+import java.util.List;
 import java.util.Optional;
 import java.util.SequencedSet;
 import javax.swing.AbstractAction;
@@ -458,7 +459,7 @@ final class MapView {
         int minTileZ = tileIndex(viewport.worldZ(clip.y));
         int maxTileZ = tileIndex(viewport.worldZ(clip.y + clip.height));
         Tool active = stroke != null ? stroke.tool() : settings.tool();
-        Layer overlay = active.paintsLayer() ? settings.layer() : null;
+        List<Layer> overlay = active.paintsLayer() ? settings.paintLayers() : List.of();
         boolean chunkGrid = showGrid && 16 * scale >= GRID_MIN_PIXELS;
         boolean tileGrid = showGrid && Tile.SIZE * scale >= GRID_MIN_PIXELS;
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);

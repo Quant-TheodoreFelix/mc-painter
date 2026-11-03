@@ -192,25 +192,54 @@ class BrushStrokeTest {
     }
 
     @Test
+    void paintsTheChosenFlowersTogetherAsOneLayer() {
+        WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
+        BrushSettings paint = settings(Tool.LAYER, 3);
+        assertEquals(List.of(Layer.OAK_TREES), paint.paintLayers());
+        paint.setFlowers(List.of(Layer.PEONY, Layer.CORNFLOWER, Layer.PEONY));
+        assertEquals(List.of(Layer.CORNFLOWER, Layer.PEONY), paint.flowers());
+        assertEquals(List.of(Layer.OAK_TREES), paint.paintLayers());
+        paint.setLayerGroup(LayerGroup.FLOWERS);
+        assertEquals(List.of(Layer.CORNFLOWER, Layer.PEONY), paint.paintLayers());
+        assertThrows(IllegalArgumentException.class, () -> paint.setFlowers(List.of()));
+        assertThrows(IllegalArgumentException.class, () -> paint.setFlowers(List.of(Layer.GRASS)));
+        long before = model.revision();
+        BrushStroke stroke = BrushStroke.begin(model, paint, Tool.LAYER, "f", 10, 10, listener);
+        stroke.repeat();
+        stroke.finish();
+        int value = model.layer(10, 10, Layer.PEONY);
+        assertTrue(value > 0);
+        assertEquals(value, model.layer(10, 10, Layer.CORNFLOWER));
+        assertEquals(0, model.layer(10, 10, Layer.DANDELION));
+        BrushStroke.begin(model, paint, Tool.LAYER_ERASE, "e", 10, 10, listener).finish();
+        assertTrue(model.layer(10, 10, Layer.PEONY) < value);
+        assertEquals(model.layer(10, 10, Layer.PEONY), model.layer(10, 10, Layer.CORNFLOWER));
+        model.undo();
+        model.undo();
+        assertEquals(before, model.revision());
+        assertEquals(0, model.layer(10, 10, Layer.PEONY));
+    }
+
+    @Test
     void paintsAndErasesTheSelectedLayer() {
         WorldModel model = Worlds.blank(1, 1, 64, 63, TerrainType.GRASS);
         BrushSettings paint = settings(Tool.LAYER, 3);
-        paint.setLayer(Layer.FLOWERS);
+        paint.setLayerGroup(LayerGroup.GRASS);
         BrushStroke stroke = BrushStroke.begin(model, paint, Tool.LAYER, "l", 10, 10, listener);
-        int once = model.layer(10, 10, Layer.FLOWERS);
+        int once = model.layer(10, 10, Layer.GRASS);
         assertEquals(Math.round(BrushStroke.LAYER_PER_DAB * Layer.MAX_VALUE), once);
         stroke.repeat();
         stroke.repeat();
         stroke.finish();
-        assertEquals(3 * once, model.layer(10, 10, Layer.FLOWERS));
-        assertEquals(0, model.layer(10, 10, Layer.GRASS));
+        assertEquals(3 * once, model.layer(10, 10, Layer.GRASS));
+        assertEquals(0, model.layer(10, 10, Layer.POPPY));
         assertEquals(Tool.LAYER_ERASE, Tool.LAYER.inverse().orElseThrow());
         BrushStroke erase = BrushStroke.begin(model, paint, Tool.LAYER_ERASE, "e", 10, 10, listener);
         erase.finish();
-        assertEquals(2 * once, model.layer(10, 10, Layer.FLOWERS));
+        assertEquals(2 * once, model.layer(10, 10, Layer.GRASS));
         model.undo();
         model.undo();
-        assertEquals(0, model.layer(10, 10, Layer.FLOWERS));
+        assertEquals(0, model.layer(10, 10, Layer.GRASS));
         assertEquals(0, Tool.LAYER.shortcut());
         assertEquals(Tool.NO_SHORTCUT, Tool.LAYER_ERASE.shortcut());
         assertFalse(Tool.LAYER_ERASE.visible());

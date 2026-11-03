@@ -1,9 +1,11 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.DataVersions;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.VanillaBiomes;
+import space.qu4nt.thirdparty.mcpainter.io.FlowerBlocks;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
@@ -19,6 +21,25 @@ final class Labels {
 
     static String layerKey(Layer layer) {
         return "layer." + layer.id();
+    }
+
+    static String layerKey(LayerGroup group) {
+        return "layer." + group.id();
+    }
+
+    static String layerSelection(Messages messages, List<Layer> layers) {
+        if (layers.size() == 1) {
+            return messages.text(layerKey(layers.getFirst()));
+        }
+        return messages.text("layer.mix", Integer.toString(layers.size()));
+    }
+
+    static String layerEntry(Messages messages, Layer layer) {
+        String name = messages.text(layerKey(layer));
+        if (!layer.flower() || FlowerBlocks.since(layer) <= DataVersions.MIN_SUPPORTED) {
+            return name;
+        }
+        return messages.text("layer.entryNew", name, release(FlowerBlocks.since(layer)));
     }
 
     static int percent(int layerValue) {

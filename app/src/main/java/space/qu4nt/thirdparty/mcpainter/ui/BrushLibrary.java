@@ -31,6 +31,7 @@ final class BrushLibrary {
     private static final Set<String> PRESET_KEYS = Set.of("format", "version", "name", "shape", "tool", "radius",
             "strength", "falloff", "terrain", "biome", "waterLevel", "autoAddTiles");
     private static final Set<String> PRESET_KEYS_WITH_LAYER = union(PRESET_KEYS, "layer");
+    private static final Set<String> PRESET_KEYS_WITH_FLOWERS = union(PRESET_KEYS_WITH_LAYER, "flowers");
 
     record Stored<T>(String file, T value) {
     }
@@ -135,6 +136,9 @@ final class BrushLibrary {
         out.put("waterLevel", preset.waterLevel());
         out.put("autoAddTiles", preset.autoAddTiles());
         out.put("layer", preset.layer().id());
+        if (preset.layer() == LayerGroup.FLOWERS) {
+            out.put("flowers", preset.flowers().stream().map(Layer::id).toList());
+        }
         return Json.write(out);
     }
 
@@ -170,7 +174,8 @@ final class BrushLibrary {
     }
 
     private static BrushPreset parsePreset(Map<String, Object> object) throws JsonFormatException {
-        requireHeader(object, PRESET_FORMAT, object.containsKey("layer") ? PRESET_KEYS_WITH_LAYER : PRESET_KEYS);
+        requireHeader(object, PRESET_FORMAT, object.containsKey("flowers") ? PRESET_KEYS_WITH_FLOWERS
+                : object.containsKey("layer") ? PRESET_KEYS_WITH_LAYER : PRESET_KEYS);
         Map<String, Object> shapeObject = asObject(object.get("shape"));
         String type = string(shapeObject, "type");
         BrushShape shape;
@@ -193,8 +198,13 @@ final class BrushLibrary {
         }
         Tool tool = Tool.fromId(string(object, "tool")).filter(Tool::visible)
                 .orElseThrow(() -> new JsonFormatException("unknown tool"));
-        Layer layer = object.containsKey("layer") ? Layer.fromId(string(object, "layer"))
+        LayerGroup layer = object.containsKey("layer") ? LayerGroup.fromId(string(object, "layer"))
                 .orElseThrow(() -> new JsonFormatException("unknown layer")) : BrushPreset.DEFAULT_LAYER;
+        List<Layer> flowers = object.containsKey("flowers") ? flowers(object.get("flowers"))
+                : LayerGroup.DEFAULT_FLOWERS;
+        if (object.containsKey("flowers") && layer != LayerGroup.FLOWERS) {
+            throw new JsonFormatException("flowers only belong to the flower layer");
+        }
         Brush.Falloff falloff = falloff(string(object, "falloff"));
         TerrainType terrain = TerrainType.fromId(string(object, "terrain"))
                 .orElseThrow(() -> new JsonFormatException("unknown terrain"));
@@ -203,7 +213,26 @@ final class BrushLibrary {
                 integer(object, "strength", BrushSettings.MIN_STRENGTH_PERCENT, 100), falloff, terrain,
                 string(object, "biome"),
                 integer(object, "waterLevel", BrushPreset.MIN_WATER_LEVEL, BrushPreset.MAX_WATER_LEVEL),
-                bool(object, "autoAddTiles"), layer);
+                bool(object, "autoAddTiles"), layer, flowers);
+    }
+
+    private static List<Layer> flowers(Object value) throws JsonFormatException {
+        if (!(value instanceof List<?> items) || items.isEmpty() || items.size() > Layer.flowers().size()) {
+            throw new JsonFormatException("flowers must be a non-empty list");
+        }
+        List<Layer> flowers = new ArrayList<>();
+        for (Object item : items) {
+            if (!(item instanceof String id)) {
+                throw new JsonFormatException("flowers must hold strings");
+            }
+            Layer flower = Layer.fromId(id).filter(Layer::flower)
+                    .orElseThrow(() -> new JsonFormatException("unknown flower"));
+            if (flowers.contains(flower)) {
+                throw new JsonFormatException("duplicate flower");
+            }
+            flowers.add(flower);
+        }
+        return flowers;
     }
 
     private static BrushShape.Mask mask(Map<String, Object> object) throws JsonFormatException {

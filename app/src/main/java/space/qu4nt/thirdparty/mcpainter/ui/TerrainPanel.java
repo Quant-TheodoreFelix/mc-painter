@@ -1,23 +1,35 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.Scrollable;
 import javax.swing.SpinnerNumberModel;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.VanillaBiomes;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
@@ -30,14 +42,19 @@ final class TerrainPanel {
 
     private static final int NOTE_COLUMNS = 18;
     private static final int BIOME_COLUMNS = 20;
+    private static final int FLOWER_ROWS = 6;
+    private static final int SCROLL_UNIT = 16;
 
     private final BrushSettings settings;
     private final Document document;
     private final Messages messages;
     private final Consumer<String> notice;
-    private final JPanel panel = new JPanel(new BorderLayout());
+    private final JPanel panel = new ScrollablePanel();
     private final JList<TerrainType> terrains = new JList<>(TerrainType.values());
-    private final JList<Layer> layers = new JList<>(Layer.values());
+    private final JList<LayerGroup> layers = new JList<>(LayerGroup.values());
+    private final Map<Layer, JCheckBox> flowerBoxes = new EnumMap<>(Layer.class);
+    private final JPanel flowerSection = new JPanel(new BorderLayout());
+    private final JTextArea layerHint = SafeText.message("", NOTE_COLUMNS);
     private final SpinnerNumberModel waterModel;
     private final JComboBox<String> biomes = new JComboBox<>(BIOMES.toArray(String[]::new));
     private final JTextArea biomeHint = SafeText.message("", NOTE_COLUMNS);
@@ -105,13 +122,13 @@ final class TerrainPanel {
         biomeSection.add(biomeHint, BorderLayout.SOUTH);
 
         layers.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        layers.setVisibleRowCount(Layer.values().length);
-        layers.setCellRenderer(Renderers.withIcon(l -> messages.text(Labels.layerKey(l)),
-                l -> new Renderers.Swatch(TileRenderer.layerColor(l))));
+        layers.setVisibleRowCount(LayerGroup.values().length);
+        layers.setCellRenderer(Renderers.withIcon(g -> messages.text(Labels.layerKey(g)),
+                g -> new Renderers.Swatch(groupColor(g))));
         layers.addListSelectionListener(e -> {
-            Layer selected = layers.getSelectedValue();
+            LayerGroup selected = layers.getSelectedValue();
             if (!syncing && !e.getValueIsAdjusting() && selected != null) {
-                settings.setLayer(selected);
+                settings.setLayerGroup(selected);
                 settings.setTool(Tool.LAYER);
             }
         });
@@ -123,12 +140,13 @@ final class TerrainPanel {
                 }
             }
         });
-        JTextArea layerHint = SafeText.message(messages.text("layer.hint"), NOTE_COLUMNS);
         layerHint.setFont(layerHint.getFont().deriveFont(Font.PLAIN, layerHint.getFont().getSize2D() - 1));
         JPanel layerSection = new JPanel(new BorderLayout(0, 4));
         layerSection.setBorder(ToolPanel.section(messages.text("panel.layers")));
-        layerSection.add(layers, BorderLayout.CENTER);
+        layerSection.add(layers, BorderLayout.NORTH);
+        layerSection.add(flowerSection, BorderLayout.CENTER);
         layerSection.add(layerHint, BorderLayout.SOUTH);
+        buildFlowers();
 
         JPanel stack = new JPanel();
         stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
@@ -150,6 +168,98 @@ final class TerrainPanel {
 
     JComponent component() {
         return panel;
+    }
+
+    private static final class ScrollablePanel extends JPanel implements Scrollable {
+
+        private static final long serialVersionUID = 1L;
+
+        ScrollablePanel() {
+            super(new BorderLayout());
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visible, int orientation, int direction) {
+            return SCROLL_UNIT;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visible, int orientation, int direction) {
+            return Math.max(SCROLL_UNIT, visible.height - SCROLL_UNIT);
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
+    }
+
+    static int groupColor(LayerGroup group) {
+        return group == LayerGroup.FLOWERS ? TileRenderer.FLOWER_MIX
+                : TileRenderer.layerColor(group.layers(List.of()).getFirst());
+    }
+
+    private void buildFlowers() {
+        JPanel rows = new JPanel(new GridLayout(0, 1));
+        for (Layer flower : Layer.flowers()) {
+            JCheckBox box = new JCheckBox();
+            String name = Labels.layerEntry(messages, flower);
+            box.getAccessibleContext().setAccessibleName(SafeText.neutralize(name));
+            box.addActionListener(e -> flowerToggled(box));
+            JLabel label = SafeText.label(name);
+            label.setIcon(new Renderers.Swatch(TileRenderer.layerColor(flower)));
+            label.setLabelFor(box);
+            label.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    box.doClick();
+                }
+            });
+            JPanel row = new JPanel(new FlowLayout(FlowLayout.LEADING, 2, 0));
+            row.add(box);
+            row.add(label);
+            rows.add(row);
+            flowerBoxes.put(flower, box);
+        }
+        JScrollPane scroll = new JScrollPane(rows, ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        Dimension size = rows.getPreferredSize();
+        int rowHeight = size.height / Layer.flowers().size();
+        scroll.getVerticalScrollBar().setUnitIncrement(rowHeight);
+        scroll.setPreferredSize(new Dimension(size.width + scroll.getVerticalScrollBar().getPreferredSize().width + 4,
+                rowHeight * FLOWER_ROWS + 4));
+        flowerSection.setBorder(ToolPanel.section(messages.text("panel.flowers")));
+        flowerSection.add(scroll, BorderLayout.CENTER);
+    }
+
+    private void flowerToggled(JCheckBox source) {
+        if (syncing) {
+            return;
+        }
+        List<Layer> chosen = new ArrayList<>();
+        flowerBoxes.forEach((flower, box) -> {
+            if (box.isSelected()) {
+                chosen.add(flower);
+            }
+        });
+        if (chosen.isEmpty()) {
+            source.setSelected(true);
+            notice.accept(messages.text("flowers.atLeastOne"));
+            return;
+        }
+        settings.setFlowers(chosen);
+        settings.setLayerGroup(LayerGroup.FLOWERS);
+        settings.setTool(Tool.LAYER);
     }
 
     private void applyBiome() {
@@ -180,7 +290,22 @@ final class TerrainPanel {
         syncing = true;
         try {
             terrains.setSelectedValue(settings.terrain(), true);
-            layers.setSelectedValue(settings.layer(), true);
+            layers.setSelectedValue(settings.layerGroup(), true);
+            boolean flowers = settings.layerGroup() == LayerGroup.FLOWERS;
+            String hint = flowers ? messages.text("layer.hint") + "\n" + messages.text("flowers.hint")
+                    : messages.text("layer.hint");
+            boolean changed = !layerHint.getText().equals(SafeText.neutralize(hint));
+            if (changed) {
+                SafeText.setText(layerHint, hint);
+            }
+            if (flowerSection.isVisible() != flowers) {
+                flowerSection.setVisible(flowers);
+                changed = true;
+            }
+            if (changed) {
+                panel.revalidate();
+            }
+            flowerBoxes.forEach((flower, box) -> box.setSelected(settings.flowers().contains(flower)));
             waterModel.setValue(settings.waterLevel());
             biomes.setSelectedItem(settings.biome());
             SafeText.setText(biomeHint, Labels.biomeHint(messages, settings.biome()));

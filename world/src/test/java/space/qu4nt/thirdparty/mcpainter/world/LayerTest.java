@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Arrays;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class LayerTest {
@@ -47,8 +48,8 @@ class LayerTest {
         long start = model.revision();
         try (Edit edit = model.beginEdit("zero")) {
             edit.setLayer(1, 1, Layer.GRASS, 0);
-            edit.setLayer(2, 2, Layer.FLOWERS, 9);
-            edit.setLayer(2, 2, Layer.FLOWERS, 0);
+            edit.setLayer(2, 2, Layer.POPPY, 9);
+            edit.setLayer(2, 2, Layer.POPPY, 0);
         }
         assertEquals(start, model.revision());
         try (Edit edit = model.beginEdit("fill")) {
@@ -133,5 +134,24 @@ class LayerTest {
         WorldModel model = builder.build();
         assertEquals(200, model.layer(4, 5, Layer.OAK_TREES));
         assertEquals(77, model.layer(100, 100, Layer.IRON_ORE));
+    }
+
+    @Test
+    void flowerLayersAreListedInOrderAndReportedWhenUsed() {
+        assertEquals(21, Layer.flowers().size());
+        assertEquals(Layer.DANDELION, Layer.flowers().getFirst());
+        assertEquals(Layer.WILDFLOWERS, Layer.flowers().getLast());
+        assertTrue(Layer.flowers().stream().allMatch(Layer::flower));
+        assertFalse(Layer.GRASS.flower());
+        assertTrue(Layer.fromId("flowers").isEmpty());
+        assertEquals(Layer.LILY_OF_THE_VALLEY, Layer.fromId("lilyOfTheValley").orElseThrow());
+        WorldModel model = oneTile(new GenerationSettings(1, true));
+        assertEquals(Set.of(Layer.COAL_ORE, Layer.IRON_ORE), model.usedLayers());
+        try (Edit edit = model.beginEdit("flowers")) {
+            edit.setLayer(3, 3, Layer.PEONY, 10);
+            edit.setLayer(4, 4, Layer.TORCHFLOWER, 10);
+            edit.setLayer(4, 4, Layer.TORCHFLOWER, 0);
+        }
+        assertEquals(Set.of(Layer.COAL_ORE, Layer.IRON_ORE, Layer.PEONY), model.usedLayers());
     }
 }

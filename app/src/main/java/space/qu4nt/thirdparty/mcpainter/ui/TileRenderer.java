@@ -2,6 +2,7 @@ package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
+import java.util.List;
 import java.util.Objects;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
@@ -21,6 +22,7 @@ final class TileRenderer {
     private static final double SLOPE_GAIN = 0.6;
     static final double OVERLAY_MIN = 0.3;
     static final double OVERLAY_RANGE = 0.65;
+    static final int FLOWER_MIX = 0xF050C8;
     private static final double SLOPE_LIMIT = 0.45;
 
     private TileRenderer() {
@@ -43,15 +45,41 @@ final class TileRenderer {
             case IRON_ORE -> 0xE0915A;
             case OAK_TREES -> 0x002A00;
             case GRASS -> 0xB8F040;
-            case FLOWERS -> 0xF050C8;
+            case DANDELION -> 0xF5D90A;
+            case POPPY -> 0xD32F2F;
+            case BLUE_ORCHID -> 0x29A8E0;
+            case ALLIUM -> 0xA855E0;
+            case AZURE_BLUET -> 0xC8D8F0;
+            case RED_TULIP -> 0xF0402A;
+            case ORANGE_TULIP -> 0xF58A1F;
+            case WHITE_TULIP -> 0xF4F4F4;
+            case PINK_TULIP -> 0xF59AC0;
+            case OXEYE_DAISY -> 0xEAE3B8;
+            case CORNFLOWER -> 0x3F6FE8;
+            case LILY_OF_THE_VALLEY -> 0xDDF2DD;
+            case SUNFLOWER -> 0xFFB300;
+            case LILAC -> 0xC79BE0;
+            case ROSE_BUSH -> 0xB8143C;
+            case PEONY -> 0xF7B8D8;
+            case TORCHFLOWER -> 0xFF6A2A;
+            case PINK_PETALS -> 0xF06AA8;
+            case PITCHER_PLANT -> 0x3FB0A8;
+            case EYEBLOSSOM -> 0xF08A30;
+            case WILDFLOWERS -> 0xF5E66A;
         };
     }
 
-    static BufferedImage render(WorldModel model, TilePos pos, int lod) {
-        return render(model, pos, lod, null);
+    static int overlayColor(List<Layer> overlay) {
+        return overlay.size() == 1 ? layerColor(overlay.getFirst()) : FLOWER_MIX;
     }
 
-    static BufferedImage render(WorldModel model, TilePos pos, int lod, Layer overlay) {
+    static BufferedImage render(WorldModel model, TilePos pos, int lod) {
+        return render(model, pos, lod, List.of());
+    }
+
+    static BufferedImage render(WorldModel model, TilePos pos, int lod, List<Layer> overlay) {
+        Objects.requireNonNull(overlay, "overlay");
+        int overlayColor = overlay.isEmpty() ? 0 : overlayColor(overlay);
         Objects.checkIndex(lod, MAX_LOD + 1);
         Tile tile = model.tile(pos).orElseThrow(() -> new IllegalArgumentException("no tile at " + pos));
         int step = 1 << lod;
@@ -82,10 +110,13 @@ final class TileRenderer {
                     double elevation = 0.85 + 0.3 * Math.clamp((height - model.minY()) / range, 0.0, 1.0);
                     color = multiply(ground, shade * elevation);
                 }
-                if (overlay != null) {
-                    int value = tile.layer(overlay, index);
+                if (!overlay.isEmpty()) {
+                    int value = 0;
+                    for (Layer layer : overlay) {
+                        value = Math.max(value, tile.layer(layer, index));
+                    }
                     if (value > 0) {
-                        color = mix(color, layerColor(overlay), OVERLAY_MIN + OVERLAY_RANGE * value / Layer.MAX_VALUE);
+                        color = mix(color, overlayColor, OVERLAY_MIN + OVERLAY_RANGE * value / Layer.MAX_VALUE);
                     }
                 }
                 pixels[iz * size + ix] = color;

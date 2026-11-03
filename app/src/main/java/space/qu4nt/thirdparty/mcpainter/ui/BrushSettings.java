@@ -1,6 +1,7 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.ResourceLocation;
@@ -26,7 +27,8 @@ final class BrushSettings {
     private String biome = WorldModel.DEFAULT_BIOME;
     private boolean autoAddTiles;
     private BrushShape shape = BrushShape.CIRCLE;
-    private Layer layer = Layer.OAK_TREES;
+    private LayerGroup layerGroup = LayerGroup.OAK_TREES;
+    private List<Layer> flowers = LayerGroup.DEFAULT_FLOWERS;
     private final List<Runnable> listeners = new ArrayList<>();
 
     void addListener(Runnable listener) {
@@ -148,20 +150,37 @@ final class BrushSettings {
         }
     }
 
-    Layer layer() {
-        return layer;
+    LayerGroup layerGroup() {
+        return layerGroup;
     }
 
-    void setLayer(Layer value) {
-        Objects.requireNonNull(value, "layer");
-        if (value != layer) {
-            layer = value;
+    void setLayerGroup(LayerGroup value) {
+        Objects.requireNonNull(value, "layer group");
+        if (value != layerGroup) {
+            layerGroup = value;
             fire();
         }
     }
 
+    List<Layer> flowers() {
+        return flowers;
+    }
+
+    void setFlowers(Collection<Layer> value) {
+        List<Layer> next = LayerGroup.requireFlowers(value);
+        if (!next.equals(flowers)) {
+            flowers = next;
+            fire();
+        }
+    }
+
+    List<Layer> paintLayers() {
+        return layerGroup.layers(flowers);
+    }
+
     void apply(BrushPreset preset, int minWaterLevel, int maxWaterLevel) {
-        layer = preset.layer();
+        layerGroup = preset.layer();
+        flowers = preset.flowers();
         tool = preset.tool();
         radius = preset.radius();
         strengthPercent = preset.strengthPercent();

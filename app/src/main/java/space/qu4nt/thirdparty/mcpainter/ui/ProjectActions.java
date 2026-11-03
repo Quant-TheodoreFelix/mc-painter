@@ -5,6 +5,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import javax.swing.JFrame;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.LevelData;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.MinecraftWorld;
@@ -13,11 +14,12 @@ import space.qu4nt.thirdparty.mcpainter.anvil.world.WorldInUseException;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
 import space.qu4nt.thirdparty.mcpainter.io.ProjectFile;
 import space.qu4nt.thirdparty.mcpainter.io.WorldExporter;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class ProjectActions {
 
-    record WorldInfo(MinecraftWorld world, boolean inUse, List<String> usedBiomes) {
+    record WorldInfo(MinecraftWorld world, boolean inUse, List<String> usedBiomes, Set<Layer> usedLayers) {
     }
 
     private final JFrame frame;
@@ -152,7 +154,7 @@ final class ProjectActions {
         WorldModel model = document.model();
         BackgroundTask.Outcome<WorldInfo> info = BackgroundTask.run(frame, messages, "task.reading", () -> {
             MinecraftWorld world = MinecraftWorld.open(directory);
-            return new WorldInfo(world, world.isInUse(), model.usedBiomes());
+            return new WorldInfo(world, world.isInUse(), model.usedBiomes(), model.usedLayers());
         });
         if (!info.ok()) {
             reportExportFailure(info.error());
@@ -168,6 +170,10 @@ final class ProjectActions {
         Optional<String> biomes = BiomeCheck.warning(messages, info.value().usedBiomes(), level.dataVersion());
         if (biomes.isPresent()) {
             confirm = confirm + "\n\n" + biomes.get();
+        }
+        Optional<String> flowers = FlowerCheck.warning(messages, info.value().usedLayers(), level.dataVersion());
+        if (flowers.isPresent()) {
+            confirm = confirm + "\n\n" + flowers.get();
         }
         if (!Dialogs.confirm(frame, messages, "export.title", confirm, "dialog.export")) {
             return;

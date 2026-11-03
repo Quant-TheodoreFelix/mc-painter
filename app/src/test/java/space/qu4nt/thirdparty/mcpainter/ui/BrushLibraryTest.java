@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import space.qu4nt.thirdparty.mcpainter.io.JsonFormatException;
 import org.junit.jupiter.api.io.TempDir;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
 import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
@@ -63,8 +64,25 @@ class BrushLibraryTest {
     @Test
     void presetsKeepTheLayerAndOlderFilesWithoutItStillLoad() throws IOException {
         BrushPreset flowers = new BrushPreset("꽃밭", BrushShape.CIRCLE, "", Tool.LAYER, 30, 60, Brush.Falloff.SMOOTH,
-                TerrainType.GRASS, "flower_forest", 63, false, Layer.FLOWERS);
-        assertEquals(flowers, BrushLibrary.parse(BrushLibrary.toJson(flowers)));
+                TerrainType.GRASS, "flower_forest", 63, false, LayerGroup.FLOWERS,
+                List.of(Layer.WILDFLOWERS, Layer.ALLIUM));
+        assertEquals(List.of(Layer.ALLIUM, Layer.WILDFLOWERS), flowers.flowers());
+        String json = BrushLibrary.toJson(flowers);
+        assertTrue(json.contains("\"layer\": \"flowers\",\n  \"flowers\": [\"allium\", \"wildflowers\"]\n}"), json);
+        assertEquals(flowers, BrushLibrary.parse(json));
+        String legacy = json.replaceAll("(?s),\\s*\"flowers\": \\[[^]]*]", "");
+        assertFalse(legacy.contains("allium"), legacy);
+        assertEquals(LayerGroup.DEFAULT_FLOWERS, ((BrushPreset) BrushLibrary.parse(legacy)).flowers());
+        assertEquals(LayerGroup.FLOWERS, ((BrushPreset) BrushLibrary.parse(legacy)).layer());
+        for (String bad : new String[] {
+                json.replace("\"allium\"", "\"grass\""),
+                json.replace("\"allium\"", "\"wildflowers\""),
+                json.replace("\"allium\"", "3"),
+                json.replace("\"layer\": \"flowers\"", "\"layer\": \"grass\""),
+                json.replaceAll("\\[[^]]*]", "[]")}) {
+            assertThrows(JsonFormatException.class, () -> BrushLibrary.parse(bad), bad);
+        }
+        assertFalse(BrushLibrary.toJson(preset(BrushShape.CIRCLE)).contains("\"flowers\""));
         String old = BrushLibrary.toJson(preset(BrushShape.CIRCLE)).replace(",\n  \"layer\": \"oakTrees\"", "");
         assertFalse(old.contains("layer"), old);
         assertEquals(BrushPreset.DEFAULT_LAYER, ((BrushPreset) BrushLibrary.parse(old)).layer());
@@ -72,7 +90,8 @@ class BrushLibraryTest {
                 Tool.LAYER_ERASE, 3, 50, Brush.Falloff.SMOOTH, TerrainType.GRASS, "plains", 63, false));
         BrushSettings settings = new BrushSettings();
         settings.apply(flowers, -64, 320);
-        assertEquals(Layer.FLOWERS, settings.layer());
+        assertEquals(LayerGroup.FLOWERS, settings.layerGroup());
+        assertEquals(List.of(Layer.ALLIUM, Layer.WILDFLOWERS), settings.paintLayers());
         assertEquals(Tool.LAYER, settings.tool());
     }
 

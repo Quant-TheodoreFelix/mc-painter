@@ -4,6 +4,7 @@ import java.awt.image.BufferedImage;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
@@ -14,7 +15,7 @@ final class TileImageCache {
 
     static final long DEFAULT_MAX_BYTES = 128L * 1024 * 1024;
 
-    private record Key(TilePos pos, int lod, Layer overlay) {
+    private record Key(TilePos pos, int lod, List<Layer> overlay) {
     }
 
     private final long maxBytes;
@@ -29,16 +30,16 @@ final class TileImageCache {
     }
 
     BufferedImage image(WorldModel model, TilePos pos, int lod) {
-        return image(model, pos, lod, null);
+        return image(model, pos, lod, List.of());
     }
 
-    BufferedImage image(WorldModel model, TilePos pos, int lod, Layer overlay) {
-        Key key = new Key(pos, lod, overlay);
+    BufferedImage image(WorldModel model, TilePos pos, int lod, List<Layer> overlay) {
+        Key key = new Key(pos, lod, List.copyOf(overlay));
         BufferedImage cached = images.get(key);
         if (cached != null) {
             return cached;
         }
-        BufferedImage image = TileRenderer.render(model, pos, lod, overlay);
+        BufferedImage image = TileRenderer.render(model, pos, lod, key.overlay());
         images.put(key, image);
         bytes += sizeOf(image);
         evictExcept(key);

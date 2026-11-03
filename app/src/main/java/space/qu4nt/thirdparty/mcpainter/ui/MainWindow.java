@@ -7,6 +7,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.List;
 import java.util.Optional;
 import java.util.prefs.BackingStoreException;
 import javax.swing.BorderFactory;
@@ -50,7 +51,7 @@ final class MainWindow {
         this.map = new MapView(document, brush, messages, new MapView.Listener() {
             @Override
             public void hovered(int x, int z) {
-                status.showColumn(document.model(), x, z, brush.tool().paintsLayer() ? brush.layer() : null);
+                status.showColumn(document.model(), x, z, brush.tool().paintsLayer() ? brush.paintLayers() : List.of());
             }
 
             @Override
@@ -106,7 +107,10 @@ final class MainWindow {
         JPanel content = new JPanel(new BorderLayout());
         content.add(leftScroll, BorderLayout.WEST);
         content.add(map.component(), BorderLayout.CENTER);
-        content.add(terrain.component(), BorderLayout.EAST);
+        JScrollPane rightScroll = new JScrollPane(terrain.component(), ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        rightScroll.setBorder(BorderFactory.createEmptyBorder());
+        content.add(rightScroll, BorderLayout.EAST);
         content.add(status.component(), BorderLayout.SOUTH);
         frame.setContentPane(content);
         frame.setJMenuBar(menuBar());

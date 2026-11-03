@@ -26,6 +26,9 @@ final class ChunkFeatures {
     private static final long TREE = 0x7472_6565_0000_0001L;
     private static final long LEAF = 0x7472_6565_0000_0002L;
     private static final long PLANT = 0x706C_616E_0000_0001L;
+    private static final long FLOWER_KIND = 0x706C_616E_0000_0002L;
+    private static final long FLOWER_SHAPE = 0x706C_616E_0000_0003L;
+    private static final List<String> FACINGS = List.of("north", "east", "south", "west");
 
     record Ore(Layer layer, Block stone, Block deepslate, int attempts, int minY, int maxY, double minRadius,
             double maxRadius) {
@@ -252,14 +255,22 @@ final class ChunkFeatures {
         BlockStateEntry air = catalog.state(Block.AIR);
         BlockStateEntry grassBlock = catalog.state(Block.GRASS_BLOCK);
         boolean shortGrass = catalog.has(Block.SHORT_GRASS);
+        List<Layer> flowers = Layer.flowers().stream().filter(f -> catalog.has(FlowerBlocks.block(f))).toList();
+        int[] values = new int[flowers.size()];
         for (int z = originZ; z < originZ + 16; z++) {
             for (int x = originX; x < originX + 16; x++) {
                 if (!model.contains(x, z)) {
                     continue;
                 }
-                int flowers = model.layer(x, z, Layer.FLOWERS);
+                int strongest = 0;
+                int total = 0;
+                for (int i = 0; i < values.length; i++) {
+                    values[i] = model.layer(x, z, flowers.get(i));
+                    strongest = Math.max(strongest, values[i]);
+                    total += values[i];
+                }
                 int grass = model.layer(x, z, Layer.GRASS);
-                if (flowers == 0 && grass == 0) {
+                if (strongest == 0 && grass == 0) {
                     continue;
                 }
                 int ground = surface(x, z);
@@ -270,24 +281,57 @@ final class ChunkFeatures {
                     continue;
                 }
                 long h = GenHash.hash(seed, PLANT, x, y, z);
-                if (GenHash.unit(h) < flowers / (double) Layer.MAX_VALUE * FLOWER_COVER) {
-                    Block flower = (h & 1) == 0 ? Block.DANDELION : Block.POPPY;
-                    blocks.put(key(x, y, z), catalog.state(flower));
+                if (GenHash.unit(h) < strongest / (double) Layer.MAX_VALUE * FLOWER_COVER) {
+                    Layer flower = pick(flowers, values, total, GenHash.mix(h ^ FLOWER_KIND));
+                    placeFlower(flower, x, y, z, GenHash.mix(h ^ FLOWER_SHAPE), air);
                     continue;
                 }
                 long g = GenHash.mix(h);
                 if (GenHash.unit(g) >= grass / (double) Layer.MAX_VALUE * GRASS_COVER) {
                     continue;
                 }
-                boolean tall = Math.floorMod(g >>> 9, (long) TALL_GRASS_ONE_IN) == 0
-                        && base.blockAt(x, y + 1, z).equals(air) && !blocks.containsKey(key(x, y + 1, z));
-                if (tall) {
+                if (Math.floorMod(g >>> 9, (long) TALL_GRASS_ONE_IN) == 0 && roomAbove(x, y, z, air)) {
                     blocks.put(key(x, y, z), catalog.state(Block.TALL_GRASS));
                     blocks.put(key(x, y + 1, z), catalog.state(Block.TALL_GRASS, "half", "upper"));
                 } else if (shortGrass) {
                     blocks.put(key(x, y, z), catalog.state(Block.SHORT_GRASS));
                 }
             }
+        }
+    }
+
+    private static Layer pick(List<Layer> flowers, int[] values, int total, long roll) {
+        double target = GenHash.unit(roll) * total;
+        Layer chosen = null;
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] == 0) {
+                continue;
+            }
+            chosen = flowers.get(i);
+            target -= values[i];
+            if (target < 0) {
+                break;
+            }
+        }
+        return chosen;
+    }
+
+    private boolean roomAbove(int x, int y, int z, BlockStateEntry air) {
+        return base.blockAt(x, y + 1, z).equals(air) && !blocks.containsKey(key(x, y + 1, z));
+    }
+
+    private void placeFlower(Layer flower, int x, int y, int z, long roll, BlockStateEntry air) {
+        Block block = FlowerBlocks.block(flower);
+        if (FlowerBlocks.tall(flower)) {
+            if (roomAbove(x, y, z, air)) {
+                blocks.put(key(x, y, z), catalog.state(block));
+                blocks.put(key(x, y + 1, z), catalog.state(block, "half", "upper"));
+            }
+        } else if (FlowerBlocks.bed(flower)) {
+            blocks.put(key(x, y, z), catalog.state(block, Map.of("facing", FACINGS.get((int) (roll & 3)),
+                    "flower_amount", Integer.toString(1 + (int) ((roll >>> 2) & 3)))));
+        } else {
+            blocks.put(key(x, y, z), catalog.state(block));
         }
     }
 }

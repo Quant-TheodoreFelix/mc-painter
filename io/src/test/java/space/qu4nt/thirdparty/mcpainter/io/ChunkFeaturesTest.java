@@ -179,7 +179,8 @@ class ChunkFeaturesTest {
     void plantsGrowOnlyOnDryGrass() {
         WorldModel model = world(TerrainType.GRASS, 70, Layer.GRASS, Layer.MAX_VALUE, 1);
         try (Edit edit = model.beginEdit("more")) {
-            edit.fillLayer(new TilePos(0, 0), Layer.FLOWERS, Layer.MAX_VALUE);
+            edit.fillLayer(new TilePos(0, 0), Layer.DANDELION, Layer.MAX_VALUE);
+            edit.fillLayer(new TilePos(0, 0), Layer.POPPY, Layer.MAX_VALUE);
             for (int z = 0; z < 16; z++) {
                 for (int x = 16; x < 32; x++) {
                     edit.setTerrain(x, z, TerrainType.SAND);
@@ -215,6 +216,88 @@ class ChunkFeaturesTest {
         double grassShare = (1 - ChunkFeatures.FLOWER_COVER) * ChunkFeatures.GRASS_COVER * columns;
         assertTrue(Math.abs(shortGrass + tall - grassShare) < columns * 0.08, "grass " + (shortGrass + tall));
         assertTrue(tall > 0);
+    }
+
+    private static Map<String, Integer> flowerCounts(Region region) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (String value : region.blocks().values()) {
+            if (!value.contains("half=upper")) {
+                counts.merge(value.replaceAll("\\{.*", ""), 1, Integer::sum);
+            }
+        }
+        return counts;
+    }
+
+    @Test
+    void flowersMixByLayerStrengthAtTheStrongestCover() {
+        WorldModel model = world(TerrainType.GRASS, 70, Layer.CORNFLOWER, Layer.MAX_VALUE, 1);
+        try (Edit edit = model.beginEdit("mix")) {
+            edit.fillLayer(new TilePos(0, 0), Layer.ALLIUM, Layer.MAX_VALUE / 3);
+        }
+        Map<String, Integer> counts = flowerCounts(features(model, DataVersions.V26_3, 0, 3));
+        int columns = 256 * 16;
+        int total = counts.getOrDefault("cornflower", 0) + counts.getOrDefault("allium", 0);
+        assertEquals(total, counts.values().stream().mapToInt(Integer::intValue).sum(), counts.toString());
+        assertTrue(Math.abs(total - columns * ChunkFeatures.FLOWER_COVER) < columns * 0.04, counts.toString());
+        double share = counts.get("allium") / (double) total;
+        assertTrue(Math.abs(share - 0.25) < 0.04, counts.toString());
+    }
+
+    @Test
+    void tallFlowersAndFlowerBedsUseTheirProperties() {
+        WorldModel model = world(TerrainType.GRASS, 70, Layer.PEONY, Layer.MAX_VALUE, 1);
+        try (Edit edit = model.beginEdit("beds")) {
+            edit.fillLayer(new TilePos(0, 0), Layer.PINK_PETALS, Layer.MAX_VALUE);
+            edit.fillLayer(new TilePos(0, 0), Layer.WILDFLOWERS, Layer.MAX_VALUE);
+        }
+        Region region = features(model, DataVersions.V26_3, 0, 1);
+        int peony = 0;
+        java.util.Set<String> bedStates = new java.util.HashSet<>();
+        for (Map.Entry<String, String> entry : region.blocks().entrySet()) {
+            String[] p = entry.getKey().split(",");
+            int x = Integer.parseInt(p[0]);
+            int y = Integer.parseInt(p[1]);
+            int z = Integer.parseInt(p[2]);
+            String value = entry.getValue();
+            if (value.equals("peony{half=lower}")) {
+                peony++;
+                assertEquals("peony{half=upper}", region.id(x, y + 1, z));
+            } else if (value.equals("peony{half=upper}")) {
+                assertEquals("peony{half=lower}", region.id(x, y - 1, z));
+            } else {
+                assertTrue(value.matches("(pink_petals|wildflowers)\\{facing=(north|east|south|west), "
+                        + "flower_amount=[1-4]}"), value);
+                bedStates.add(value);
+            }
+        }
+        assertTrue(peony > 0);
+        assertTrue(bedStates.size() > 20, bedStates.toString());
+    }
+
+    @Test
+    void flowersMissingFromTheWorldVersionAreLeftOut() {
+        WorldModel model = world(TerrainType.GRASS, 70, Layer.TORCHFLOWER, Layer.MAX_VALUE, 1);
+        assertTrue(features(model, DataVersions.V1_18, 0, 1).blocks().isEmpty());
+        assertTrue(features(model, DataVersions.V1_19, 0, 1).blocks().isEmpty());
+        assertTrue(flowerCounts(features(model, DataVersions.V1_20, 0, 1)).containsKey("torchflower"));
+        try (Edit edit = model.beginEdit("poppy")) {
+            edit.fillLayer(new TilePos(0, 0), Layer.POPPY, Layer.MAX_VALUE / 5);
+            edit.fillLayer(new TilePos(0, 0), Layer.EYEBLOSSOM, Layer.MAX_VALUE);
+            edit.fillLayer(new TilePos(0, 0), Layer.WILDFLOWERS, Layer.MAX_VALUE);
+        }
+        Map<String, Integer> old = flowerCounts(features(model, DataVersions.V1_18, 0, 1));
+        assertEquals(List.of("poppy"), List.copyOf(old.keySet()));
+        int columns = 256 * 4;
+        assertTrue(Math.abs(old.get("poppy") - columns * ChunkFeatures.FLOWER_COVER / 5) < columns * 0.04,
+                old.toString());
+        assertEquals(java.util.Set.of("poppy", "torchflower"),
+                flowerCounts(features(model, DataVersions.V1_21_4 - 1, 0, 1)).keySet());
+        assertTrue(flowerCounts(features(model, DataVersions.V1_21_4, 0, 1)).containsKey("closed_eyeblossom"));
+        assertFalse(flowerCounts(features(model, DataVersions.V1_21_4, 0, 1)).containsKey("wildflowers"));
+        assertTrue(flowerCounts(features(model, DataVersions.V1_21_5, 0, 1)).containsKey("wildflowers"));
+        assertEquals(List.of(Layer.TORCHFLOWER, Layer.EYEBLOSSOM, Layer.WILDFLOWERS),
+                FlowerBlocks.unavailable(model.usedLayers(), DataVersions.V1_18));
+        assertEquals(List.of(), FlowerBlocks.unavailable(model.usedLayers(), DataVersions.V26_3));
     }
 
     @Test

@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipException;
 import space.qu4nt.thirdparty.mcpainter.anvil.internal.AtomicFiles;
@@ -47,7 +48,10 @@ import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 public final class ProjectFile {
 
     public static final String EXTENSION = ".mcpaint";
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
+    static final int FLOWER_LAYERS_VERSION = 3;
+    static final String LEGACY_FLOWERS = "flowers";
+    static final List<Layer> LEGACY_FLOWER_LAYERS = List.of(Layer.DANDELION, Layer.POPPY);
     public static final int MIN_FORMAT_VERSION = 1;
     public static final int HARD_MAX_TILES = 65536;
 
@@ -136,7 +140,7 @@ public final class ProjectFile {
                     if (++tiles > maxTiles) {
                         throw new ProjectFormatException("more tiles than declared limit " + maxTiles);
                     }
-                    addTile(builder, decode(payload, TILE_LIMITS), terrainTypes);
+                    addTile(builder, decode(payload, TILE_LIMITS), terrainTypes, version);
                 } else {
                     throw new ProjectFormatException("unknown record type " + type);
                 }
@@ -244,7 +248,7 @@ public final class ProjectFile {
         return types;
     }
 
-    private static void addTile(WorldModel.Builder builder, CompoundTag tag, List<TerrainType> terrainTypes)
+    private static void addTile(WorldModel.Builder builder, CompoundTag tag, List<TerrainType> terrainTypes, int version)
             throws ProjectFormatException {
         int[] heightBits = requireArray(tag, "heights");
         byte[] terrainIndices = tag.get("terrain", ByteArrayTag.class)
@@ -281,18 +285,36 @@ public final class ProjectFile {
                 CompoundTag layers = tag.get("layers", CompoundTag.class)
                         .orElseThrow(() -> new ProjectFormatException("layers must be a compound"));
                 for (Map.Entry<String, Tag> entry : layers.entries().entrySet()) {
-                    Layer layer = Layer.fromId(entry.getKey())
-                            .orElseThrow(() -> new ProjectFormatException("unknown layer " + entry.getKey()));
-                    switch (entry.getValue()) {
-                        case IntTag fill -> builder.layerFill(pos, layer, fill.value());
-                        case ByteArrayTag values -> builder.layer(pos, layer, values.toArray());
-                        default -> throw new ProjectFormatException("layer " + layer.id() + " has a wrong type");
+                    for (Layer layer : layersFor(entry.getKey(), version)) {
+                        switch (entry.getValue()) {
+                            case IntTag fill -> builder.layerFill(pos, layer, fill.value());
+                            case ByteArrayTag values -> builder.layer(pos, layer, values.toArray());
+                            default -> throw new ProjectFormatException("layer " + entry.getKey() + " has a wrong type");
+                        }
                     }
                 }
             }
         } catch (IllegalArgumentException e) {
             throw new ProjectFormatException("invalid tile: " + e.getMessage(), e);
         }
+    }
+
+    private static List<Layer> layersFor(String id, int version) throws ProjectFormatException {
+        if (version < FLOWER_LAYERS_VERSION) {
+            if (id.equals(LEGACY_FLOWERS)) {
+                return LEGACY_FLOWER_LAYERS;
+            }
+            Optional<Layer> layer = Layer.fromId(id).filter(found -> !found.flower());
+            if (layer.isPresent()) {
+                return List.of(layer.get());
+            }
+        } else {
+            Optional<Layer> layer = Layer.fromId(id);
+            if (layer.isPresent()) {
+                return List.of(layer.get());
+            }
+        }
+        throw new ProjectFormatException("unknown layer " + id);
     }
 
     private static void writeRecord(DataOutputStream out, int type, CompoundTag payload) throws IOException {
