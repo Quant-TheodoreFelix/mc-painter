@@ -33,6 +33,7 @@ import space.qu4nt.thirdparty.mcpainter.nbt.Tag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
@@ -164,6 +165,36 @@ class WorldExporterTest {
             }
         }
         assertEquals(first.toString(), second.toString());
+    }
+
+    @Test
+    void treesCountForMotionBlockingButNotWithoutLeaves() throws IOException {
+        writeTemplate();
+        WorldModel model = WorldModel.builder(-64, 320, 63).generation(new GenerationSettings(11)).build();
+        try (Edit edit = model.beginEdit("forest")) {
+            edit.addTile(new TilePos(0, 0), 70, TerrainType.GRASS);
+            edit.fillLayer(new TilePos(0, 0), Layer.OAK_TREES, Layer.MAX_VALUE);
+        }
+        WorldExporter.export(model, world);
+        int leafColumns = 0;
+        try (RegionFile region = RegionFile.open(world.resolve("region/r.0.0.mca"))) {
+            CompoundTag heightmaps = region.readChunk(2, 2).orElseThrow().tag()
+                    .get("Heightmaps", CompoundTag.class).orElseThrow();
+            int[] blocking = decode(heightmaps, "MOTION_BLOCKING");
+            int[] noLeaves = decode(heightmaps, "MOTION_BLOCKING_NO_LEAVES");
+            int[] surface = decode(heightmaps, "WORLD_SURFACE");
+            for (int i = 0; i < HeightmapCodec.COLUMNS; i++) {
+                assertTrue(blocking[i] >= noLeaves[i]);
+                assertTrue(surface[i] >= blocking[i]);
+                if (blocking[i] > noLeaves[i]) {
+                    leafColumns++;
+                    int above = noLeaves[i] - (70 + 1 + 64);
+                    assertTrue(above == 0 || (above >= ChunkFeatures.MIN_TRUNK
+                            && above < ChunkFeatures.MIN_TRUNK + ChunkFeatures.TRUNK_VARIATION), "above " + above);
+                }
+            }
+        }
+        assertTrue(leafColumns > 50, "leaf columns " + leafColumns);
     }
 
     @Test

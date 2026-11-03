@@ -98,8 +98,13 @@ public final class WorldExporter {
                     Optional<ChunkData> own = existing == null ? Optional.empty()
                             : Prototypes.fullChunk(existing, localX, localZ, world.level().dataVersion());
                     ChunkColumns columns = new ChunkColumns(model, catalog, chunk[0], chunk[1], minY, maxY);
+                    ChunkFeatures features = ChunkFeatures.generate(model, catalog, columns::blockAt, chunk[0],
+                            chunk[1], minY, maxY);
                     RootTag rebuilt = ChunkRebuilder.rebuild(own.orElse(prototype), chunk[0], chunk[1],
-                            columns::blockAt, catalog::traits,
+                            (x, y, z) -> {
+                                BlockStateEntry feature = features.at(x, y, z);
+                                return feature != null ? feature : columns.blockAt(x, y, z);
+                            }, catalog::traits,
                             (x, y, z) -> biomes.get(columns.biomeIndex(x, z)));
                     writer.put(localX, localZ, RawChunk.encode(rebuilt, ChunkCompression.ZLIB, timestamp));
                     if (own.isPresent()) {
