@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.SequencedSet;
 import org.junit.jupiter.api.Test;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
+import space.qu4nt.thirdparty.mcpainter.world.BrushShape;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -163,6 +164,40 @@ class BrushStrokeTest {
         flatten.setAutoAddTiles(true);
         BrushStroke.begin(model, flatten, Tool.FLATTEN, "f", -10, 10, listener).finish();
         assertEquals(64.5f, model.height(-10, 10), 1e-4);
+    }
+
+    @Test
+    void deletesTouchedTilesWithoutAutoAdd() {
+        WorldModel model = Worlds.blank(3, 1, 64, 63, TerrainType.GRASS);
+        List<TilePos> start = model.tilePositions();
+        TilePos left = start.getFirst();
+        TilePos middle = start.get(1);
+        int x = middle.minBlockX() + 5;
+        int z = middle.minBlockZ() + 64;
+        BrushSettings delete = settings(Tool.DELETE_TILES, 10);
+        delete.setAutoAddTiles(true);
+        long before = model.revision();
+        BrushStroke stroke = BrushStroke.begin(model, delete, Tool.DELETE_TILES, "d", x, z, listener);
+        stroke.dragTo(x, z + 300);
+        stroke.finish();
+        assertEquals(List.of(start.getLast()), model.tilePositions());
+        assertFalse(model.contains(left.minBlockX(), left.minBlockZ()));
+        assertTrue(changes.getFirst().contains(start.getLast()));
+        assertEquals(Tool.DELETE_TILES, Tool.ADD_TILES.inverse().orElseThrow());
+        assertEquals(Tool.ADD_TILES, Tool.DELETE_TILES.inverse().orElseThrow());
+        assertTrue(model.undo());
+        assertEquals(start, model.tilePositions());
+        assertEquals(before, model.revision());
+    }
+
+    @Test
+    void touchedTilesFollowTheBrushShape() {
+        Brush round = new Brush(20, Brush.Falloff.CONSTANT);
+        assertEquals(List.of(new TilePos(0, 0)), BrushStroke.touchedTiles(round, 64, 64));
+        assertEquals(4, BrushStroke.touchedTiles(round, 0, 0).size());
+        assertEquals(3, BrushStroke.touchedTiles(round, 112, 112).size());
+        Brush square = new Brush(20, Brush.Falloff.CONSTANT, BrushShape.SQUARE);
+        assertEquals(4, BrushStroke.touchedTiles(square, 112, 112).size());
     }
 
     @Test

@@ -133,6 +133,10 @@ final class ProjectActions {
             return;
         }
         map.finishStroke();
+        if (document.model().tileCount() == 0) {
+            Dialogs.info(frame, messages, "export.title", messages.text("export.empty"));
+            return;
+        }
         Path start = worldDirectory != null ? worldDirectory : FileChoosers.defaultWorldDirectory();
         Optional<Path> chosen = FileChoosers.chooseWorld(frame, messages, start);
         if (chosen.isEmpty()) {

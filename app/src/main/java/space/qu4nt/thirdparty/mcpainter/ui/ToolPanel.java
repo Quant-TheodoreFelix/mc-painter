@@ -166,7 +166,7 @@ final class ToolPanel {
                     messages.text("brush.strengthValue", Integer.toString(settings.strengthPercent())));
             falloff.setSelectedItem(settings.falloff());
             autoAddTiles.setSelected(settings.autoAddTiles());
-            autoAddTiles.setEnabled(settings.tool() != Tool.ADD_TILES);
+            autoAddTiles.setEnabled(!settings.tool().editsTiles());
             ShapeEntry current = null;
             for (int i = 0; i < shapeModel.getSize(); i++) {
                 if (shapeModel.getElementAt(i).shape().equals(settings.shape())) {

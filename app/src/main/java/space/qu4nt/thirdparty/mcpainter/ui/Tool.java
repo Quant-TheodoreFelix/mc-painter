@@ -10,7 +10,8 @@ enum Tool {
     TERRAIN("terrain", false),
     WATER("water", false),
     BIOME("biome", false),
-    ADD_TILES("addTiles", false);
+    ADD_TILES("addTiles", false),
+    DELETE_TILES("deleteTiles", false);
 
     private final String key;
     private final boolean shapesHeight;
@@ -49,8 +50,14 @@ enum Tool {
         return switch (this) {
             case RAISE -> Optional.of(LOWER);
             case LOWER -> Optional.of(RAISE);
+            case ADD_TILES -> Optional.of(DELETE_TILES);
+            case DELETE_TILES -> Optional.of(ADD_TILES);
             default -> Optional.empty();
         };
+    }
+
+    boolean editsTiles() {
+        return this == ADD_TILES || this == DELETE_TILES;
     }
 
     int shortcut() {

@@ -51,6 +51,10 @@ final class MapView {
     private static final Color TILE_LINE = new Color(0, 0, 0, 110);
     private static final Color BRUSH_OUTER = new Color(0, 0, 0, 170);
     private static final Color BRUSH_INNER = new Color(255, 255, 255, 230);
+    private static final Color ADD_PREVIEW = new Color(255, 255, 255, 70);
+    private static final Color ADD_EDGE = new Color(255, 255, 255, 200);
+    private static final Color DELETE_PREVIEW = new Color(235, 35, 35, 130);
+    private static final Color DELETE_EDGE = new Color(255, 40, 40, 230);
     private static final int GRID_MIN_PIXELS = 12;
 
     private final Document document;
@@ -460,6 +464,10 @@ final class MapView {
         int bz = blockZ(mouse.y);
         double cx = viewport.screenX(bx + 0.5);
         double cz = viewport.screenZ(bz + 0.5);
+        Tool tool = stroke != null ? stroke.tool() : settings.tool();
+        if (tool.editsTiles()) {
+            paintTilePreview(g, tool == Tool.DELETE_TILES, bx, bz);
+        }
         Shape outline;
         if (settings.shape().square()) {
             double half = Math.max(2, (settings.radius() + 0.5) * scale);
@@ -475,6 +483,23 @@ final class MapView {
         g.setStroke(new BasicStroke(1f));
         g.setColor(BRUSH_INNER);
         g.draw(outline);
+    }
+
+    private void paintTilePreview(Graphics2D g, boolean delete, int bx, int bz) {
+        WorldModel model = document.model();
+        g.setStroke(new BasicStroke(2f));
+        for (TilePos pos : BrushStroke.touchedTiles(settings.brush(), bx, bz)) {
+            if (model.tile(pos).isPresent() == delete) {
+                int x0 = screenX(pos.minBlockX());
+                int z0 = screenZ(pos.minBlockZ());
+                int w = screenX(pos.minBlockX() + Tile.SIZE) - x0;
+                int h = screenZ(pos.minBlockZ() + Tile.SIZE) - z0;
+                g.setColor(delete ? DELETE_PREVIEW : ADD_PREVIEW);
+                g.fillRect(x0, z0, w, h);
+                g.setColor(delete ? DELETE_EDGE : ADD_EDGE);
+                g.drawRect(x0 + 1, z0 + 1, w - 2, h - 2);
+            }
+        }
     }
 
     private int screenX(int worldX) {

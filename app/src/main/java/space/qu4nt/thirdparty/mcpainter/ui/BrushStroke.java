@@ -1,6 +1,8 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.SequencedSet;
 import space.qu4nt.thirdparty.mcpainter.world.Brush;
@@ -116,7 +118,8 @@ final class BrushStroke {
     private void dab(int x, int z) {
         lastX = x;
         lastZ = z;
-        boolean added = (tool == Tool.ADD_TILES || autoAddTiles) && addTiles(x, z);
+        boolean added = (tool == Tool.ADD_TILES || (autoAddTiles && tool != Tool.DELETE_TILES)) && addTiles(x, z);
+        boolean removed = tool == Tool.DELETE_TILES && removeTiles(x, z);
         if (Float.isNaN(flattenTarget)) {
             flattenTarget = model.contains(x, z) ? (float) Math.floor(model.height(x, z)) + 0.5f
                     : model.seaLevel() + 0.5f;
@@ -129,19 +132,45 @@ final class BrushStroke {
             case TERRAIN -> TerrainOps.paintTerrain(edit, x, z, brush, terrain, PAINT_THRESHOLD);
             case WATER -> TerrainOps.setWaterLevel(edit, x, z, brush, waterLevel, PAINT_THRESHOLD);
             case BIOME -> TerrainOps.paintBiome(edit, x, z, brush, biome, PAINT_THRESHOLD);
-            case ADD_TILES -> {
+            case ADD_TILES, DELETE_TILES -> {
             }
         }
-        int margin = brush.radius() + (added ? Tile.SIZE : TileRenderer.SHADE_MARGIN);
+        int margin = brush.radius() + (added || removed ? Tile.SIZE : TileRenderer.SHADE_MARGIN);
         listener.changed(tilesAround(x, z, margin));
     }
 
     private boolean addTiles(int x, int z) {
+        boolean added = false;
+        for (TilePos pos : touchedTiles(brush, x, z)) {
+            if (model.tile(pos).isPresent()) {
+                continue;
+            }
+            if (model.tileCount() >= model.maxTiles()) {
+                if (!limitReported) {
+                    limitReported = true;
+                    listener.tileLimitReached(model.maxTiles());
+                }
+                return added;
+            }
+            added |= edit.addTile(pos, model.seaLevel() + 1, terrain);
+        }
+        return added;
+    }
+
+    private boolean removeTiles(int x, int z) {
+        boolean removed = false;
+        for (TilePos pos : touchedTiles(brush, x, z)) {
+            removed |= edit.removeTile(pos);
+        }
+        return removed;
+    }
+
+    static List<TilePos> touchedTiles(Brush brush, int x, int z) {
         int r = brush.radius();
         TilePos min = TilePos.ofBlock(x - r, z - r);
         TilePos max = TilePos.ofBlock(x + r, z + r);
         double reach = (r + 0.5) * (r + 0.5);
-        boolean added = false;
+        List<TilePos> touched = new ArrayList<>();
         for (int tz = min.z(); tz <= max.z(); tz++) {
             for (int tx = min.x(); tx <= max.x(); tx++) {
                 TilePos pos = new TilePos(tx, tz);
@@ -149,21 +178,12 @@ final class BrushStroke {
                 double nearestZ = Math.clamp(z, pos.minBlockZ(), pos.minBlockZ() + Tile.SIZE - 1);
                 double ddx = nearestX - x;
                 double ddz = nearestZ - z;
-                boolean touches = brush.shape().square() || ddx * ddx + ddz * ddz <= reach;
-                if (!touches || model.tile(pos).isPresent()) {
-                    continue;
+                if (brush.shape().square() || ddx * ddx + ddz * ddz <= reach) {
+                    touched.add(pos);
                 }
-                if (model.tileCount() >= model.maxTiles()) {
-                    if (!limitReported) {
-                        limitReported = true;
-                        listener.tileLimitReached(model.maxTiles());
-                    }
-                    return added;
-                }
-                added |= edit.addTile(pos, model.seaLevel() + 1, terrain);
             }
         }
-        return added;
+        return touched;
     }
 
     static SequencedSet<TilePos> tilesAround(int x, int z, int margin) {
