@@ -1,32 +1,58 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.awt.Component;
+import java.awt.FlowLayout;
 import java.awt.GridBagLayout;
 import java.text.ParseException;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
+import space.qu4nt.thirdparty.mcpainter.io.WorldExporter;
+import space.qu4nt.thirdparty.mcpainter.io.WorldSpec;
+import space.qu4nt.thirdparty.mcpainter.world.BaseTerrain;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
+import space.qu4nt.thirdparty.mcpainter.world.Tile;
+import space.qu4nt.thirdparty.mcpainter.world.TileRect;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class Forms {
 
-    static final int MAX_SIDE_TILES = 64;
-
     static final int SEED_COLUMNS = 16;
+    static final int MAX_SIDE_TILES = TileRect.WORLD.width();
+    static final int MAX_SIDE_BLOCKS = 2 * TileRect.WORLD_BLOCK_LIMIT;
 
-    record NewWorld(int width, int depth, int height, int seaLevel, TerrainType terrain,
-            GenerationSettings generation) {
+    record NewWorld(TileRect bounds, int height, int seaLevel, TerrainType terrain, GenerationSettings generation) {
+
+        WorldSpec spec() {
+            return new WorldSpec(Worlds.MIN_Y, Worlds.MAX_Y, seaLevel, List.of(WorldModel.DEFAULT_BIOME), generation,
+                    bounds, BaseTerrain.flat(height, terrain));
+        }
     }
 
     record Import(HeightmapImporter.Options options, GenerationSettings generation) {
+    }
+
+    enum Start {
+        CREATE,
+        OPEN,
+        RESTORE,
+        CANCEL
+    }
+
+    record StartChoice(Start action, Optional<NewWorld> world) {
     }
 
     private Forms() {
@@ -34,29 +60,65 @@ final class Forms {
 
     static final class NewWorldForm {
 
+        private final JRadioButton byTiles;
+        private final JRadioButton byBlocks;
         private final JSpinner width = spinner(Worlds.STARTUP_TILES, 1, MAX_SIDE_TILES);
         private final JSpinner depth = spinner(Worlds.STARTUP_TILES, 1, MAX_SIDE_TILES);
+        private final JSpinner widthBlocks = spinner(Worlds.STARTUP_TILES * Tile.SIZE, 1, MAX_SIDE_BLOCKS,
+                Tile.SIZE);
+        private final JSpinner depthBlocks = spinner(Worlds.STARTUP_TILES * Tile.SIZE, 1, MAX_SIDE_BLOCKS,
+                Tile.SIZE);
         private final JSpinner height = spinner(Worlds.BASE_HEIGHT, Worlds.MIN_Y + 1, Worlds.MAX_Y - 1);
         private final JSpinner sea = spinner(Worlds.SEA_LEVEL, Worlds.MIN_Y, Worlds.MAX_Y);
         private final JComboBox<TerrainType> terrain = new JComboBox<>(TerrainType.values());
         private final JTextField seed = seedField();
         private final JCheckBox initialOres;
+        private final JLabel summary = SafeText.label(" ");
+        private final JLabel areaNote = SafeText.label(" ");
+        private final Messages messages;
+        private final int budgetTiles;
         private final JPanel panel = form();
 
         NewWorldForm(Messages messages) {
+            this(messages, Integer.MAX_VALUE);
+        }
+
+        NewWorldForm(Messages messages, int budgetTiles) {
+            this.messages = messages;
+            this.budgetTiles = budgetTiles;
             initialOres = initialOresBox(messages);
             terrain.setRenderer(Renderers.withIcon(t -> messages.text(Labels.terrainKey(t)),
                     t -> new Renderers.Swatch(TileRenderer.terrainColor(t))));
-            ToolPanel.addRow(panel, 0, SafeText.label(messages.text("new.width")), width);
-            ToolPanel.addRow(panel, 1, SafeText.label(messages.text("new.depth")), depth);
-            ToolPanel.addRow(panel, 2, SafeText.label(messages.text("new.baseHeight")), height);
-            ToolPanel.addRow(panel, 3, SafeText.label(messages.text("new.seaLevel")), sea);
-            ToolPanel.addRow(panel, 4, SafeText.label(messages.text("new.terrain")), terrain);
-            ToolPanel.addRow(panel, 5, SafeText.label(messages.text("new.seed")), seed);
-            ToolPanel.addWide(panel, 6, SafeText.label(messages.text("new.seedHint")));
-            ToolPanel.addWide(panel, 7, initialOres);
-            ToolPanel.addWide(panel, 8, SafeText.label(messages.text("new.heightRange",
+            byTiles = SafeText.plain(new JRadioButton(messages.text("new.byTiles"), true));
+            byBlocks = SafeText.plain(new JRadioButton(messages.text("new.byBlocks")));
+            ButtonGroup modes = new ButtonGroup();
+            modes.add(byTiles);
+            modes.add(byBlocks);
+            JPanel modeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+            modeRow.add(byTiles);
+            modeRow.add(byBlocks);
+            int row = 0;
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.size")), modeRow);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.width")), width);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.depth")), depth);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.widthBlocks")), widthBlocks);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.depthBlocks")), depthBlocks);
+            ToolPanel.addWide(panel, row++, summary);
+            ToolPanel.addWide(panel, row++, areaNote);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.baseHeight")), height);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.seaLevel")), sea);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.terrain")), terrain);
+            ToolPanel.addRow(panel, row++, SafeText.label(messages.text("new.seed")), seed);
+            ToolPanel.addWide(panel, row++, SafeText.label(messages.text("new.seedHint")));
+            ToolPanel.addWide(panel, row++, initialOres);
+            ToolPanel.addWide(panel, row, SafeText.label(messages.text("new.heightRange",
                     Integer.toString(Worlds.MIN_Y), Integer.toString(Worlds.MAX_Y))));
+            byTiles.addActionListener(e -> refresh());
+            byBlocks.addActionListener(e -> refresh());
+            for (JSpinner spinner : List.of(width, depth, widthBlocks, depthBlocks)) {
+                spinner.addChangeListener(e -> refresh());
+            }
+            refresh();
         }
 
         JPanel panel() {
@@ -71,14 +133,51 @@ final class Forms {
             return initialOres;
         }
 
+        void useBlocks(boolean blocks) {
+            (blocks ? byBlocks : byTiles).setSelected(true);
+            refresh();
+        }
+
+        JSpinner widthSpinner() {
+            return byBlocks.isSelected() ? widthBlocks : width;
+        }
+
+        JSpinner depthSpinner() {
+            return byBlocks.isSelected() ? depthBlocks : depth;
+        }
+
+        TileRect bounds() {
+            if (byBlocks.isSelected()) {
+                return TileRect.centeredBlocks(value(widthBlocks), value(depthBlocks));
+            }
+            return TileRect.centered(value(width), value(depth));
+        }
+
         Optional<NewWorld> read() {
-            int w = value(width);
-            int d = value(depth);
-            if ((long) w * d > WorldModel.DEFAULT_MAX_TILES) {
+            TerrainType type = terrain.getSelectedItem() instanceof TerrainType t ? t : TerrainType.GRASS;
+            try {
+                return Optional.of(new NewWorld(bounds(), value(height), value(sea), type,
+                        generation(seed, initialOres)));
+            } catch (IllegalArgumentException e) {
                 return Optional.empty();
             }
-            TerrainType type = terrain.getSelectedItem() instanceof TerrainType t ? t : TerrainType.GRASS;
-            return Optional.of(new NewWorld(w, d, value(height), value(sea), type, generation(seed, initialOres)));
+        }
+
+        private void refresh() {
+            boolean blocks = byBlocks.isSelected();
+            width.setEnabled(!blocks);
+            depth.setEnabled(!blocks);
+            widthBlocks.setEnabled(blocks);
+            depthBlocks.setEnabled(blocks);
+            TileRect bounds = bounds();
+            SafeText.setText(summary, messages.text("new.summary", number(bounds.minBlockX()),
+                    number(bounds.maxBlockX()), number(bounds.minBlockZ()), number(bounds.maxBlockZ()),
+                    number(bounds.count())));
+            long tiles = bounds.count();
+            WorldExporter.Estimate estimate = WorldExporter.estimate(tiles, WorldExporter.regionCount(bounds), 1);
+            String size = PerformanceForm.gigabytes(estimate.bytes());
+            SafeText.setText(areaNote, tiles <= budgetTiles ? messages.text("new.fitsArea", size)
+                    : messages.text("new.needsAreas", number(budgetTiles), size));
         }
     }
 
@@ -120,17 +219,52 @@ final class Forms {
         }
     }
 
-    static Optional<NewWorld> newWorld(Component parent, Messages messages) {
-        NewWorldForm form = new NewWorldForm(messages);
+    static Optional<NewWorld> newWorld(Component parent, Messages messages, int budgetTiles) {
+        NewWorldForm form = new NewWorldForm(messages, budgetTiles);
         while (Dialogs.form(parent, messages, "new.title", form.panel())) {
             Optional<NewWorld> spec = form.read();
             if (spec.isPresent()) {
                 return spec;
             }
-            Dialogs.error(parent, messages,
-                    messages.text("new.tooManyTiles", Integer.toString(WorldModel.DEFAULT_MAX_TILES)), "");
+            Dialogs.error(parent, messages, messages.text("new.invalidSize"), "");
         }
         return Optional.empty();
+    }
+
+    static StartChoice start(Component parent, Messages messages, int budgetTiles, boolean hasTempSaves) {
+        NewWorldForm form = new NewWorldForm(messages, budgetTiles);
+        JPanel content = new JPanel(new java.awt.BorderLayout(0, 10));
+        content.add(SafeText.message(messages.text(hasTempSaves ? "start.hintRestore" : "start.hint")),
+                java.awt.BorderLayout.NORTH);
+        content.add(form.panel(), java.awt.BorderLayout.CENTER);
+        Object[] options = {messages.text("start.create"), messages.text("start.open"),
+                messages.text("start.restore"), messages.text("dialog.cancel")};
+        while (true) {
+            int result = JOptionPane.showOptionDialog(parent, content, messages.text("new.title"),
+                    JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+            switch (result) {
+                case 0 -> {
+                    Optional<NewWorld> world = form.read();
+                    if (world.isPresent()) {
+                        return new StartChoice(Start.CREATE, world);
+                    }
+                    Dialogs.error(parent, messages, messages.text("new.invalidSize"), "");
+                }
+                case 1 -> {
+                    return new StartChoice(Start.OPEN, Optional.empty());
+                }
+                case 2 -> {
+                    return new StartChoice(Start.RESTORE, Optional.empty());
+                }
+                default -> {
+                    return new StartChoice(Start.CANCEL, Optional.empty());
+                }
+            }
+        }
+    }
+
+    static String number(long value) {
+        return String.format(Locale.ROOT, "%,d", value);
     }
 
     static Optional<Import> importOptions(Component parent, Messages messages) {
@@ -166,7 +300,11 @@ final class Forms {
     }
 
     private static JSpinner spinner(int value, int min, int max) {
-        return new JSpinner(new SpinnerNumberModel(Math.clamp(value, min, max), min, max, 1));
+        return spinner(value, min, max, 1);
+    }
+
+    private static JSpinner spinner(int value, int min, int max, int step) {
+        return new JSpinner(new SpinnerNumberModel(Math.clamp(value, min, max), min, max, step));
     }
 
     private static int value(JSpinner spinner) {

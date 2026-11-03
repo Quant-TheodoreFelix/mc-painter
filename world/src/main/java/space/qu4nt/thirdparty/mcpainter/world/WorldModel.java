@@ -87,12 +87,12 @@ public final class WorldModel {
         return base;
     }
 
-    public TileRect editable() {
-        return editable;
+    public Optional<TileRect> editable() {
+        return Optional.ofNullable(editable);
     }
 
     public boolean isEditable(TilePos pos) {
-        return editable.contains(pos) && bounds.contains(pos);
+        return editable != null && editable.contains(pos) && bounds.contains(pos);
     }
 
     public Set<TilePos> dirtyTiles() {
@@ -383,6 +383,11 @@ public final class WorldModel {
 
         public Builder editable(TileRect value) {
             editable = Objects.requireNonNull(value, "editable");
+            return this;
+        }
+
+        public Builder readOnly() {
+            editable = null;
             return this;
         }
 

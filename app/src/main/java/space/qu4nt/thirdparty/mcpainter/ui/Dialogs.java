@@ -14,6 +14,7 @@ final class Dialogs {
 
     enum Choice {
         SAVE,
+        KEEP,
         DISCARD,
         CANCEL
     }
@@ -78,15 +79,16 @@ final class Dialogs {
     }
 
     static Choice unsaved(Component parent, Messages messages, String documentName) {
-        Object[] options = {messages.text("dialog.save"), messages.text("dialog.discard"),
-                messages.text("dialog.cancel")};
+        Object[] options = {messages.text("dialog.save"), messages.text("dialog.keep"),
+                messages.text("dialog.discard"), messages.text("dialog.cancel")};
         int result = JOptionPane.showOptionDialog(parent,
                 SafeText.message(messages.text("unsaved.message", documentName)),
-                messages.text("dialog.confirmTitle"), JOptionPane.YES_NO_CANCEL_OPTION,
+                messages.text("dialog.confirmTitle"), JOptionPane.DEFAULT_OPTION,
                 JOptionPane.WARNING_MESSAGE, null, options, options[0]);
         return switch (result) {
             case 0 -> Choice.SAVE;
-            case 1 -> Choice.DISCARD;
+            case 1 -> Choice.KEEP;
+            case 2 -> Choice.DISCARD;
             default -> Choice.CANCEL;
         };
     }

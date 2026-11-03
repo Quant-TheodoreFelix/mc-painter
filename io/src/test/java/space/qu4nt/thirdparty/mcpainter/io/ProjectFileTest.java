@@ -350,7 +350,7 @@ class ProjectFileTest {
         try (Workspace workspace = ProjectFile.unpack(file, root, "sample", (model, pos) -> new int[64],
                 (done, total) -> reports.add(done))) {
             assertEquals(2, workspace.tileCount());
-            assertEquals(2, workspace.pendingCount());
+            assertEquals(0, workspace.pendingCount());
             assertEquals(new GenerationSettings(-1234567890123L, true), workspace.spec().generation());
             assertFalse(reports.isEmpty());
             Path again = dir.resolve("again" + ProjectFile.EXTENSION);

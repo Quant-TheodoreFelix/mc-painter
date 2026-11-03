@@ -7,6 +7,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.prefs.BackingStoreException;
@@ -24,7 +25,9 @@ import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
+import space.qu4nt.thirdparty.mcpainter.io.Workspace;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -80,7 +83,7 @@ final class MainWindow {
         map.setGridOpacity(settings.chunkGridOpacity(), settings.tileGridOpacity());
         map.setPreview(settings.preview());
         map.setThreads(settings.threads(environment));
-        this.project = new ProjectActions(frame, messages, document, map);
+        this.project = new ProjectActions(frame, messages, document, map, settings, environment, status::notice);
         this.undoItem = item("menu.edit.undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), this::undo);
         this.redoItem = item("menu.edit.redo",
                 KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask | InputEvent.SHIFT_DOWN_MASK), this::redo);
@@ -146,6 +149,7 @@ final class MainWindow {
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
         map.component().requestFocusInWindow();
+        SwingUtilities.invokeLater(project::start);
     }
 
     JFrame frame() {
@@ -157,13 +161,19 @@ final class MainWindow {
         JMenu file = menu("menu.file");
         file.add(item("menu.file.new", KeyStroke.getKeyStroke(KeyEvent.VK_N, menuMask), project::newWorld));
         file.add(item("menu.file.open", KeyStroke.getKeyStroke(KeyEvent.VK_O, menuMask), project::open));
+        file.add(item("menu.file.restore", null, project::restore));
+        file.addSeparator();
         file.add(item("menu.file.save", KeyStroke.getKeyStroke(KeyEvent.VK_S, menuMask), project::save));
         file.add(item("menu.file.saveAs",
                 KeyStroke.getKeyStroke(KeyEvent.VK_S, menuMask | InputEvent.SHIFT_DOWN_MASK), project::saveAs));
+        file.add(item("menu.file.tempSave",
+                KeyStroke.getKeyStroke(KeyEvent.VK_S, menuMask | InputEvent.ALT_DOWN_MASK), project::tempSave));
         file.addSeparator();
         file.add(item("menu.file.importHeightmap", KeyStroke.getKeyStroke(KeyEvent.VK_I, menuMask),
                 project::importHeightmap));
         file.add(item("menu.file.export", KeyStroke.getKeyStroke(KeyEvent.VK_E, menuMask), project::export));
+        file.add(item("menu.file.exportAll",
+                KeyStroke.getKeyStroke(KeyEvent.VK_E, menuMask | InputEvent.SHIFT_DOWN_MASK), project::exportAll));
         if (!nativeQuit) {
             file.addSeparator();
             file.add(item("menu.file.exit", null, this::requestClose));
@@ -241,7 +251,9 @@ final class MainWindow {
         Desktop desktop = Desktop.getDesktop();
         if (nativeQuit) {
             desktop.setQuitHandler((event, response) -> {
-                if (project.confirmDiscard()) {
+                Optional<Runnable> release = project.confirmDiscard();
+                if (release.isPresent()) {
+                    release.get().run();
                     frame.dispose();
                     response.performQuit();
                 } else {
@@ -282,6 +294,9 @@ final class MainWindow {
         }
         map.finishStroke();
         WorldModel model = document.model();
+        if (document.workspace().isEmpty()) {
+            return;
+        }
         Optional<String> text = Dialogs.prompt(frame, messages, "seed.title", "seed.label",
                 Long.toString(model.generation().seed()));
         if (text.isEmpty()) {
@@ -289,6 +304,17 @@ final class MainWindow {
         }
         long seed = Seeds.parse(text.get());
         if (seed == model.generation().seed()) {
+            return;
+        }
+        if (model.editable().isEmpty()) {
+            Workspace workspace = document.workspace().get();
+            try {
+                workspace.update(workspace.spec().withGeneration(workspace.spec().generation().withSeed(seed)),
+                        workspace.state().withUnsaved(true));
+                document.replaceModel(Session.closedArea(workspace));
+            } catch (IOException | RuntimeException e) {
+                Dialogs.error(frame, messages, "error.tempSave", e);
+            }
             return;
         }
         try (Edit edit = model.beginEdit(messages.text("seed.edit"))) {
@@ -353,7 +379,9 @@ final class MainWindow {
     }
 
     private void requestClose() {
-        if (project.confirmDiscard()) {
+        Optional<Runnable> release = project.confirmDiscard();
+        if (release.isPresent()) {
+            release.get().run();
             frame.dispose();
         }
     }

@@ -159,7 +159,7 @@ public final class ProjectFile {
                         return;
                     }
                     batch.add(new Workspace.Write(pos, model.tile(pos).orElseThrow(),
-                            thumbnails.thumbnail(model, pos), true));
+                            thumbnails.thumbnail(model, pos), false));
                     if (batch.size() >= UNPACK_BATCH) {
                         workspace.write(List.copyOf(batch), false);
                         batch.clear();

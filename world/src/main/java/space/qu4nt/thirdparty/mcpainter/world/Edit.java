@@ -30,7 +30,7 @@ public final class Edit implements AutoCloseable {
     public boolean addTile(TilePos pos, float height, TerrainType terrain) {
         requireOpen();
         Map<TilePos, Tile> tiles = model.tilesForEdit();
-        if (tiles.containsKey(pos) || !model.isEditable(pos)) {
+        if (tiles.containsKey(pos) || !model.isEditable(pos) || model.base().filled()) {
             return false;
         }
         if (tiles.size() >= model.maxTiles()) {

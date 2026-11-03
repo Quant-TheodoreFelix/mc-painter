@@ -33,7 +33,7 @@ public final class App {
 
     private static void start(Settings settings, Messages messages) {
         installLookAndFeel();
-        MainWindow window = new MainWindow(messages, settings, Worlds.startup());
+        MainWindow window = new MainWindow(messages, settings, Session.empty());
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
             error.printStackTrace();
             SwingUtilities.invokeLater(() -> report(window, messages, error));

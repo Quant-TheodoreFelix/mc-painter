@@ -359,6 +359,11 @@ class WorldModelTest {
         assertTrue(model.undo());
         assertEquals(TerrainType.SAND, model.terrain(3, 3));
 
+        WorldModel locked = WorldModel.builder(-64, 320, 62).readOnly().build();
+        assertTrue(locked.editable().isEmpty());
+        try (Edit edit = locked.beginEdit("add")) {
+            assertFalse(edit.addTile(new TilePos(0, 0), 70, TerrainType.SAND));
+        }
         WorldModel empty = WorldModel.builder(-64, 320, 62).editable(new TileRect(0, 0, 1, 0)).build();
         try (Edit edit = empty.beginEdit("add")) {
             assertTrue(edit.addTile(new TilePos(1, 0), 70, TerrainType.SAND));

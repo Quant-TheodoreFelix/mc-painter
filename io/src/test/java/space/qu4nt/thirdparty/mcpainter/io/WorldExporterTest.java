@@ -292,7 +292,7 @@ class WorldExporterTest {
                 new TileRect(-2, -1, 1, 0), BaseTerrain.flat(70.5f, TerrainType.GRASS));
         try (Workspace workspace = Workspace.create(world.resolve("ws"), spec, "flat")) {
             WorldModel area = AreaLoader.load(workspace, new TileRect(0, 0, 0, 0), 64, 2, Progress.NONE);
-            assertEquals(new TileRect(0, 0, 0, 0), area.editable());
+            assertEquals(java.util.Optional.of(new TileRect(0, 0, 0, 0)), area.editable());
             assertEquals(6, area.tileCount());
             try (Edit edit = area.beginEdit("paint")) {
                 edit.setHeight(5, 5, 100);

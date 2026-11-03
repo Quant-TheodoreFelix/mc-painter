@@ -13,8 +13,10 @@ import space.qu4nt.thirdparty.mcpainter.anvil.world.UnsupportedVersionException;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.WorldInUseException;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
 import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
+import space.qu4nt.thirdparty.mcpainter.world.BaseTerrain;
 import space.qu4nt.thirdparty.mcpainter.world.Layer;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
+import space.qu4nt.thirdparty.mcpainter.world.TileRect;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 class ProjectActionsTest {
@@ -75,23 +77,29 @@ class ProjectActionsTest {
     }
 
     @Test
-    void formsReadDefaultsAndRejectTooManyTiles() {
+    void formsReadTileAndBlockSizes() {
         Messages messages = Messages.load(Language.KOREAN);
         Forms.NewWorldForm form = new Forms.NewWorldForm(messages);
         form.seed().setText("42");
-        assertEquals(new Forms.NewWorld(4, 4, 64, 63, TerrainType.GRASS, new GenerationSettings(42)),
-                form.read().orElseThrow());
+        assertEquals(new Forms.NewWorld(new TileRect(-2, -2, 1, 1), 64, 63, TerrainType.GRASS,
+                new GenerationSettings(42)), form.read().orElseThrow());
+        Forms.NewWorld world = form.read().orElseThrow();
+        assertEquals(BaseTerrain.flat(64, TerrainType.GRASS), world.spec().base());
+        assertEquals(new TileRect(-2, -2, 1, 1), world.spec().bounds());
         form.initialOres().setSelected(true);
         assertEquals(new GenerationSettings(42, true), form.read().orElseThrow().generation());
         form.initialOres().setSelected(false);
         form.seed().setText("mc-painter");
         assertEquals("mc-painter".hashCode(), form.read().orElseThrow().generation().seed());
-        for (Component c : form.panel().getComponents()) {
-            if (c instanceof JSpinner spinner && ((Number) spinner.getValue()).intValue() == 4) {
-                spinner.setValue(Forms.MAX_SIDE_TILES);
-            }
-        }
-        assertTrue(form.read().isEmpty());
+        form.widthSpinner().setValue(Forms.MAX_SIDE_TILES);
+        form.depthSpinner().setValue(Forms.MAX_SIDE_TILES);
+        assertEquals(TileRect.WORLD, form.read().orElseThrow().bounds());
+        form.useBlocks(true);
+        form.widthSpinner().setValue(80_000);
+        form.depthSpinner().setValue(129);
+        assertEquals(new TileRect(-312, -1, 312, 0), form.read().orElseThrow().bounds());
+        form.widthSpinner().setValue(Forms.MAX_SIDE_BLOCKS);
+        assertEquals(TileRect.WORLD.width(), form.read().orElseThrow().bounds().width());
         Forms.ImportForm importForm = new Forms.ImportForm(messages);
         importForm.seed().setText(" -7 ");
         Forms.Import options = importForm.read();

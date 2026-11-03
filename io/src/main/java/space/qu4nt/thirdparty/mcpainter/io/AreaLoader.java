@@ -30,6 +30,15 @@ public final class AreaLoader {
         return workspace.storedIn(rect).size();
     }
 
+    public static List<TilePos> storedIn(Workspace workspace) {
+        List<TilePos> stored = new ArrayList<>();
+        for (Workspace.Entry entry : workspace.entries()) {
+            stored.add(entry.pos());
+        }
+        stored.sort(null);
+        return stored;
+    }
+
     public static List<TileRect> regionsToWrite(Workspace workspace, TileRect area) {
         if (workspace.spec().base().filled()) {
             return WorldExporter.regionRects(area);
