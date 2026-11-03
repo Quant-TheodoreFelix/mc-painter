@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.UnsupportedVersionException;
 import space.qu4nt.thirdparty.mcpainter.anvil.world.WorldInUseException;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
+import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 
 class ProjectActionsTest {
@@ -75,15 +76,22 @@ class ProjectActionsTest {
     void formsReadDefaultsAndRejectTooManyTiles() {
         Messages messages = Messages.load(Language.KOREAN);
         Forms.NewWorldForm form = new Forms.NewWorldForm(messages);
-        assertEquals(new Forms.NewWorld(4, 4, 64, 63, TerrainType.GRASS), form.read().orElseThrow());
+        form.seed().setText("42");
+        assertEquals(new Forms.NewWorld(4, 4, 64, 63, TerrainType.GRASS, new GenerationSettings(42)),
+                form.read().orElseThrow());
+        form.seed().setText("mc-painter");
+        assertEquals("mc-painter".hashCode(), form.read().orElseThrow().generation().seed());
         for (Component c : form.panel().getComponents()) {
             if (c instanceof JSpinner spinner && ((Number) spinner.getValue()).intValue() == 4) {
                 spinner.setValue(Forms.MAX_SIDE_TILES);
             }
         }
         assertTrue(form.read().isEmpty());
-        HeightmapImporter.Options options = new Forms.ImportForm(messages).read();
-        assertEquals(HeightmapImporter.Options.defaults(), options);
+        Forms.ImportForm importForm = new Forms.ImportForm(messages);
+        importForm.seed().setText(" -7 ");
+        Forms.Import options = importForm.read();
+        assertEquals(HeightmapImporter.Options.defaults(), options.options());
+        assertEquals(-7, options.generation().seed());
     }
 
     @Test

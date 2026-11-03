@@ -7,6 +7,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Optional;
 import java.util.prefs.BackingStoreException;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -23,6 +24,7 @@ import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.WindowConstants;
+import space.qu4nt.thirdparty.mcpainter.world.Edit;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class MainWindow {
@@ -161,6 +163,8 @@ final class MainWindow {
         JMenu edit = menu("menu.edit");
         edit.add(undoItem);
         edit.add(redoItem);
+        edit.addSeparator();
+        edit.add(item("menu.edit.seed", null, this::editSeed));
         if (!nativeQuit) {
             redoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Y, menuMask));
         }
@@ -251,6 +255,27 @@ final class MainWindow {
             map.invalidateAll();
             document.changed();
         }
+    }
+
+    private void editSeed() {
+        if (!ProjectActions.idle()) {
+            return;
+        }
+        map.finishStroke();
+        WorldModel model = document.model();
+        Optional<String> text = Dialogs.prompt(frame, messages, "seed.title", "seed.label",
+                Long.toString(model.generation().seed()));
+        if (text.isEmpty()) {
+            return;
+        }
+        long seed = Seeds.parse(text.get());
+        if (seed == model.generation().seed()) {
+            return;
+        }
+        try (Edit edit = model.beginEdit(messages.text("seed.edit"))) {
+            edit.setGeneration(model.generation().withSeed(seed));
+        }
+        document.changed();
     }
 
     private void changeLanguage(Language language) {

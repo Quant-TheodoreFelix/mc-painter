@@ -8,8 +8,10 @@ import javax.swing.BorderFactory;
 import javax.swing.JComboBox;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
+import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import space.qu4nt.thirdparty.mcpainter.io.HeightmapImporter;
+import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
@@ -17,7 +19,13 @@ final class Forms {
 
     static final int MAX_SIDE_TILES = 64;
 
-    record NewWorld(int width, int depth, int height, int seaLevel, TerrainType terrain) {
+    static final int SEED_COLUMNS = 16;
+
+    record NewWorld(int width, int depth, int height, int seaLevel, TerrainType terrain,
+            GenerationSettings generation) {
+    }
+
+    record Import(HeightmapImporter.Options options, GenerationSettings generation) {
     }
 
     private Forms() {
@@ -30,6 +38,7 @@ final class Forms {
         private final JSpinner height = spinner(Worlds.BASE_HEIGHT, Worlds.MIN_Y + 1, Worlds.MAX_Y - 1);
         private final JSpinner sea = spinner(Worlds.SEA_LEVEL, Worlds.MIN_Y, Worlds.MAX_Y);
         private final JComboBox<TerrainType> terrain = new JComboBox<>(TerrainType.values());
+        private final JTextField seed = seedField();
         private final JPanel panel = form();
 
         NewWorldForm(Messages messages) {
@@ -40,12 +49,18 @@ final class Forms {
             ToolPanel.addRow(panel, 2, SafeText.label(messages.text("new.baseHeight")), height);
             ToolPanel.addRow(panel, 3, SafeText.label(messages.text("new.seaLevel")), sea);
             ToolPanel.addRow(panel, 4, SafeText.label(messages.text("new.terrain")), terrain);
-            ToolPanel.addWide(panel, 5, SafeText.label(messages.text("new.heightRange",
+            ToolPanel.addRow(panel, 5, SafeText.label(messages.text("new.seed")), seed);
+            ToolPanel.addWide(panel, 6, SafeText.label(messages.text("new.seedHint")));
+            ToolPanel.addWide(panel, 7, SafeText.label(messages.text("new.heightRange",
                     Integer.toString(Worlds.MIN_Y), Integer.toString(Worlds.MAX_Y))));
         }
 
         JPanel panel() {
             return panel;
+        }
+
+        JTextField seed() {
+            return seed;
         }
 
         Optional<NewWorld> read() {
@@ -55,7 +70,7 @@ final class Forms {
                 return Optional.empty();
             }
             TerrainType type = terrain.getSelectedItem() instanceof TerrainType t ? t : TerrainType.GRASS;
-            return Optional.of(new NewWorld(w, d, value(height), value(sea), type));
+            return Optional.of(new NewWorld(w, d, value(height), value(sea), type, generation(seed)));
         }
     }
 
@@ -65,21 +80,28 @@ final class Forms {
         private final JSpinner low = spinner((int) defaults.low(), defaults.minY(), defaults.maxY());
         private final JSpinner high = spinner((int) defaults.high(), defaults.minY(), defaults.maxY());
         private final JSpinner sea = spinner(defaults.seaLevel(), defaults.minY(), defaults.maxY());
+        private final JTextField seed = seedField();
         private final JPanel panel = form();
 
         ImportForm(Messages messages) {
             ToolPanel.addRow(panel, 0, SafeText.label(messages.text("import.low")), low);
             ToolPanel.addRow(panel, 1, SafeText.label(messages.text("import.high")), high);
             ToolPanel.addRow(panel, 2, SafeText.label(messages.text("import.seaLevel")), sea);
+            ToolPanel.addRow(panel, 3, SafeText.label(messages.text("new.seed")), seed);
+            ToolPanel.addWide(panel, 4, SafeText.label(messages.text("new.seedHint")));
         }
 
         JPanel panel() {
             return panel;
         }
 
-        HeightmapImporter.Options read() {
-            return new HeightmapImporter.Options(defaults.minY(), defaults.maxY(), value(sea), value(low), value(high),
-                    defaults.maxTiles());
+        JTextField seed() {
+            return seed;
+        }
+
+        Import read() {
+            return new Import(new HeightmapImporter.Options(defaults.minY(), defaults.maxY(), value(sea), value(low),
+                    value(high), defaults.maxTiles()), generation(seed));
         }
     }
 
@@ -96,7 +118,7 @@ final class Forms {
         return Optional.empty();
     }
 
-    static Optional<HeightmapImporter.Options> importOptions(Component parent, Messages messages) {
+    static Optional<Import> importOptions(Component parent, Messages messages) {
         ImportForm form = new ImportForm(messages);
         while (Dialogs.form(parent, messages, "import.title", form.panel())) {
             try {
@@ -106,6 +128,14 @@ final class Forms {
             }
         }
         return Optional.empty();
+    }
+
+    private static JTextField seedField() {
+        return SafeText.plain(new JTextField(SEED_COLUMNS));
+    }
+
+    private static GenerationSettings generation(JTextField seed) {
+        return new GenerationSettings(Seeds.parse(seed.getText()));
     }
 
     private static JPanel form() {

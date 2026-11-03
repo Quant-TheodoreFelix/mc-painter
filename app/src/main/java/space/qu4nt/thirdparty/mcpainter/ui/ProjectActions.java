@@ -49,7 +49,7 @@ final class ProjectActions {
         }
         Forms.NewWorld s = spec.get();
         BackgroundTask.Outcome<WorldModel> created = BackgroundTask.run(frame, messages, "task.creating",
-                () -> Worlds.blank(s.width(), s.depth(), s.height(), s.seaLevel(), s.terrain()));
+                () -> Worlds.blank(s.width(), s.depth(), s.height(), s.seaLevel(), s.terrain(), s.generation()));
         if (created.ok()) {
             document.replace(created.value(), null, false);
         } else {
@@ -116,12 +116,12 @@ final class ProjectActions {
         }
         Path path = image.get();
         imageDirectory = path.getParent();
-        Optional<HeightmapImporter.Options> options = Forms.importOptions(frame, messages);
-        if (options.isEmpty()) {
+        Optional<Forms.Import> spec = Forms.importOptions(frame, messages);
+        if (spec.isEmpty()) {
             return;
         }
         BackgroundTask.Outcome<WorldModel> imported = BackgroundTask.run(frame, messages, "task.importing",
-                () -> HeightmapImporter.importPng(path, options.get()));
+                () -> HeightmapImporter.importPng(path, spec.get().options(), spec.get().generation()));
         if (imported.ok()) {
             document.replace(imported.value(), null, true);
         } else {

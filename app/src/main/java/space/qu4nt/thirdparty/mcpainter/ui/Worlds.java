@@ -1,6 +1,7 @@
 package space.qu4nt.thirdparty.mcpainter.ui;
 
 import java.util.Arrays;
+import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.Tile;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
@@ -18,10 +19,15 @@ final class Worlds {
     }
 
     static WorldModel blank(int widthTiles, int depthTiles, float height, int seaLevel, TerrainType terrain) {
+        return blank(widthTiles, depthTiles, height, seaLevel, terrain, GenerationSettings.DEFAULT);
+    }
+
+    static WorldModel blank(int widthTiles, int depthTiles, float height, int seaLevel, TerrainType terrain,
+            GenerationSettings generation) {
         if (widthTiles < 1 || depthTiles < 1 || (long) widthTiles * depthTiles > WorldModel.DEFAULT_MAX_TILES) {
             throw new IllegalArgumentException("tile count out of range");
         }
-        WorldModel.Builder builder = WorldModel.builder(MIN_Y, MAX_Y, seaLevel);
+        WorldModel.Builder builder = WorldModel.builder(MIN_Y, MAX_Y, seaLevel).generation(generation);
         float[] heights = new float[Tile.AREA];
         Arrays.fill(heights, Math.clamp(height, MIN_Y, MAX_Y));
         byte[] terrainOrdinals = new byte[Tile.AREA];
@@ -40,6 +46,7 @@ final class Worlds {
     }
 
     static WorldModel startup() {
-        return blank(STARTUP_TILES, STARTUP_TILES, BASE_HEIGHT, SEA_LEVEL, TerrainType.GRASS);
+        return blank(STARTUP_TILES, STARTUP_TILES, BASE_HEIGHT, SEA_LEVEL, TerrainType.GRASS,
+                new GenerationSettings(Seeds.random()));
     }
 }
