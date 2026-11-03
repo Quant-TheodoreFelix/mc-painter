@@ -10,6 +10,9 @@ dependencies {
 application {
     mainModule = "space.qu4nt.thirdparty.mcpainter"
     mainClass = "space.qu4nt.thirdparty.mcpainter.Main"
+    if (System.getProperty("os.name").lowercase().startsWith("mac")) {
+        applicationDefaultJvmArgs = listOf("--add-exports=java.desktop/com.apple.eawt.event=space.qu4nt.thirdparty.mcpainter")
+    }
 }
 
 tasks.named<Test>("test") {

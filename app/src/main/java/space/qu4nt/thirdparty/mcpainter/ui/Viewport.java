@@ -6,21 +6,22 @@ final class Viewport {
     static final int MAX_ZOOM = 4;
     static final int MAX_FIT_ZOOM = 2;
     static final double WORLD_LIMIT = 30_000_000;
+    private static final double SNAP = 1e-6;
 
-    private int zoom;
+    private double zoom;
     private double originX;
     private double originZ;
 
-    int zoom() {
+    double zoom() {
         return zoom;
     }
 
     double scale() {
-        return Math.scalb(1.0, zoom);
+        return Math.pow(2, zoom);
     }
 
     int lod() {
-        return Math.max(0, -zoom);
+        return Math.max(0, (int) Math.floor(-zoom + SNAP));
     }
 
     int percent() {
@@ -51,14 +52,23 @@ final class Viewport {
         return (worldZ - originZ) * scale();
     }
 
-    boolean zoomAt(int steps, double screenX, double screenZ) {
+    boolean zoomAt(double steps, double screenX, double screenZ) {
         return setZoom(zoom + steps, screenX, screenZ);
     }
 
-    boolean setZoom(int value, double screenX, double screenZ) {
+    boolean zoomInAt(double screenX, double screenZ) {
+        return setZoom(Math.floor(zoom + SNAP) + 1, screenX, screenZ);
+    }
+
+    boolean zoomOutAt(double screenX, double screenZ) {
+        return setZoom(Math.ceil(zoom - SNAP) - 1, screenX, screenZ);
+    }
+
+    boolean setZoom(double value, double screenX, double screenZ) {
         requireFinite(screenX, screenZ);
-        int next = Math.clamp(value, MIN_ZOOM, MAX_ZOOM);
-        if (next == zoom) {
+        requireFinite(value, 0);
+        double next = Math.clamp(value, MIN_ZOOM, MAX_ZOOM);
+        if (Math.abs(next - zoom) < SNAP) {
             return false;
         }
         double anchorX = worldX(screenX);

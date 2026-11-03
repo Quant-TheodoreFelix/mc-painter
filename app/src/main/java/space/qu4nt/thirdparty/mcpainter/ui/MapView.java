@@ -13,6 +13,7 @@ import java.awt.Shape;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -47,6 +48,9 @@ final class MapView {
     }
 
     static final int REPEAT_MILLIS = 50;
+    static final double WHEEL_ZOOM = 0.2;
+    static final int MAX_RADIUS_STEPS = 64;
+    static final int PAN_MODIFIERS = InputEvent.CTRL_DOWN_MASK | InputEvent.META_DOWN_MASK;
     private static final Color BACKGROUND = new Color(0x26282B);
     private static final Color CHUNK_LINE = new Color(0, 0, 0, 40);
     private static final Color TILE_LINE = new Color(0, 0, 0, 110);
@@ -74,7 +78,7 @@ final class MapView {
     private boolean spaceDown;
     private boolean showGrid = true;
     private boolean fitPending = true;
-    private double wheelRemainder;
+    private double radiusRemainder;
 
     MapView(Document document, BrushSettings settings, Messages messages, Listener listener) {
         this.document = document;
@@ -157,6 +161,7 @@ final class MapView {
             }
         });
         installKeys();
+        MacGestures.installMagnify(canvas, this::pinch);
         settings.addListener(canvas::repaint);
         document.onModelReplaced(() -> {
             finishStroke();
@@ -192,11 +197,11 @@ final class MapView {
     }
 
     void zoomIn() {
-        zoomBy(1, canvas.getWidth() / 2.0, canvas.getHeight() / 2.0);
+        zoomed(viewport.zoomInAt(canvas.getWidth() / 2.0, canvas.getHeight() / 2.0));
     }
 
     void zoomOut() {
-        zoomBy(-1, canvas.getWidth() / 2.0, canvas.getHeight() / 2.0);
+        zoomed(viewport.zoomOutAt(canvas.getWidth() / 2.0, canvas.getHeight() / 2.0));
     }
 
     void zoomReset() {
@@ -259,7 +264,8 @@ final class MapView {
         }
         boolean left = SwingUtilities.isLeftMouseButton(e);
         boolean right = SwingUtilities.isRightMouseButton(e);
-        if (SwingUtilities.isMiddleMouseButton(e) || (left && spaceDown)) {
+        boolean modified = (e.getModifiersEx() & PAN_MODIFIERS) != 0;
+        if (SwingUtilities.isMiddleMouseButton(e) || ((left || right) && (spaceDown || modified))) {
             panAnchor = e.getPoint();
             activeButton = e.getButton();
             updateCursor();
@@ -324,19 +330,42 @@ final class MapView {
     }
 
     private void wheel(MouseWheelEvent e) {
-        if (panAnchor != null) {
+        double rotation = e.getPreciseWheelRotation();
+        if (panAnchor != null || !Double.isFinite(rotation)) {
             return;
         }
-        wheelRemainder += e.getPreciseWheelRotation();
-        int steps = (int) wheelRemainder;
-        if (steps != 0) {
-            wheelRemainder -= steps;
-            zoomBy(-steps, e.getX(), e.getY());
+        if ((e.getModifiersEx() & PAN_MODIFIERS) != 0) {
+            resizeBrush(rotation);
+            return;
+        }
+        radiusRemainder = 0;
+        if (e.isShiftDown()) {
+            return;
+        }
+        zoomed(viewport.zoomAt(-rotation * WHEEL_ZOOM, e.getX(), e.getY()));
+    }
+
+    private void resizeBrush(double rotation) {
+        radiusRemainder += rotation;
+        int steps = (int) radiusRemainder;
+        radiusRemainder -= steps;
+        for (int i = 0; i < Math.min(Math.abs(steps), MAX_RADIUS_STEPS); i++) {
+            int step = radiusStep();
+            settings.setRadius(settings.radius() + (steps < 0 ? step : -step));
         }
     }
 
-    private void zoomBy(int steps, double screenX, double screenZ) {
-        if (viewport.zoomAt(steps, screenX, screenZ)) {
+    private void pinch(double magnification) {
+        if (panAnchor != null || !Double.isFinite(magnification) || magnification <= -1) {
+            return;
+        }
+        double steps = Math.log(1 + magnification) / Math.log(2);
+        Point anchor = mouse != null ? mouse : new Point(canvas.getWidth() / 2, canvas.getHeight() / 2);
+        zoomed(viewport.zoomAt(steps, anchor.x, anchor.y));
+    }
+
+    private void zoomed(boolean changed) {
+        if (changed) {
             listener.viewChanged();
             if (mouse != null) {
                 hover();

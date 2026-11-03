@@ -30,19 +30,43 @@ class ViewportTest {
         assertEquals(before, view.worldX(123), 1e-9);
         assertEquals(beforeZ, view.worldZ(456), 1e-9);
         assertTrue(view.zoomAt(-5, 10, 10));
-        assertEquals(-3, view.zoom());
+        assertEquals(-3, view.zoom(), 1e-9);
         assertEquals(3, view.lod());
         assertEquals(13, view.percent());
+    }
+
+    @Test
+    void zoomsInFractionalStepsAndSnapsMenuSteps() {
+        Viewport view = new Viewport();
+        view.centerOn(0, 0, 800, 600);
+        double before = view.worldX(200);
+        assertTrue(view.zoomAt(-0.2, 200, 100));
+        assertEquals(-0.2, view.zoom(), 1e-9);
+        assertEquals(0, view.lod());
+        assertEquals(87, view.percent());
+        assertEquals(before, view.worldX(200), 1e-9);
+        assertTrue(view.zoomAt(-1, 200, 100));
+        assertEquals(1, view.lod());
+        assertTrue(view.zoomInAt(0, 0));
+        assertEquals(-1, view.zoom(), 1e-9);
+        assertTrue(view.zoomInAt(0, 0));
+        assertEquals(0, view.zoom(), 1e-9);
+        assertTrue(view.zoomAt(0.3, 0, 0));
+        assertTrue(view.zoomOutAt(0, 0));
+        assertEquals(0, view.zoom(), 1e-9);
+        assertFalse(view.zoomAt(1e-9, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> view.zoomAt(Double.NaN, 0, 0));
     }
 
     @Test
     void clampsZoomAndOrigin() {
         Viewport view = new Viewport();
         assertTrue(view.setZoom(99, 0, 0));
-        assertEquals(Viewport.MAX_ZOOM, view.zoom());
+        assertEquals(Viewport.MAX_ZOOM, view.zoom(), 1e-9);
         assertFalse(view.zoomAt(1, 0, 0));
+        assertFalse(view.zoomInAt(0, 0));
         view.setZoom(Viewport.MIN_ZOOM, 0, 0);
-        assertEquals(Viewport.MIN_ZOOM, view.zoom());
+        assertEquals(Viewport.MIN_ZOOM, view.zoom(), 1e-9);
         view.pan(-1e12, 1e12);
         assertEquals(Viewport.WORLD_LIMIT, view.originX());
         assertEquals(-Viewport.WORLD_LIMIT, view.originZ());
@@ -62,11 +86,11 @@ class ViewportTest {
     void fitChoosesLargestZoomThatShowsEverything() {
         Viewport view = new Viewport();
         view.fit(-256, -256, 256, 256, 800, 600);
-        assertEquals(0, view.zoom());
+        assertEquals(0, view.zoom(), 1e-9);
         assertEquals(0, view.worldX(400), 1e-9);
         view.fit(0, 0, 128, 128, 800, 600);
-        assertEquals(Viewport.MAX_FIT_ZOOM, view.zoom());
+        assertEquals(Viewport.MAX_FIT_ZOOM, view.zoom(), 1e-9);
         view.fit(-100_000, 0, 100_000, 10, 800, 600);
-        assertEquals(Viewport.MIN_ZOOM, view.zoom());
+        assertEquals(Viewport.MIN_ZOOM, view.zoom(), 1e-9);
     }
 }
