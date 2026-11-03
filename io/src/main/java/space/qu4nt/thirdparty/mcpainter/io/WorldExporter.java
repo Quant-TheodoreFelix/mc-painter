@@ -30,6 +30,8 @@ public final class WorldExporter {
 
     private static final int CHUNKS_PER_TILE = Tile.SIZE / 16;
     private static final int SUBSURFACE_DEPTH = 3;
+    static final int DEEPSLATE_TOP = 0;
+    static final int DEEPSLATE_BLEND = 8;
 
     public record Result(int regionsWritten, int chunksReplaced, int chunksCreated, int entityChunksRemoved,
             int poiChunksRemoved) {
@@ -147,6 +149,7 @@ public final class WorldExporter {
         private final int originX;
         private final int originZ;
         private final int minY;
+        private final long seed;
         private final int[] surface = new int[256];
         private final int[] water = new int[256];
         private final TerrainType[] terrain = new TerrainType[256];
@@ -154,6 +157,7 @@ public final class WorldExporter {
         private final BlockStateEntry air;
         private final BlockStateEntry bedrock;
         private final BlockStateEntry stone;
+        private final BlockStateEntry deepslate;
         private final BlockStateEntry dirt;
         private final BlockStateEntry grass;
         private final BlockStateEntry sand;
@@ -165,6 +169,7 @@ public final class WorldExporter {
             this.originX = chunkX * 16;
             this.originZ = chunkZ * 16;
             this.minY = minY;
+            this.seed = model.generation().seed();
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
                     int i = z * 16 + x;
@@ -179,6 +184,7 @@ public final class WorldExporter {
             air = catalog.state(BlockCatalog.Block.AIR);
             bedrock = catalog.state(BlockCatalog.Block.BEDROCK);
             stone = catalog.state(BlockCatalog.Block.STONE);
+            deepslate = catalog.state(BlockCatalog.Block.DEEPSLATE);
             dirt = catalog.state(BlockCatalog.Block.DIRT);
             grass = catalog.state(BlockCatalog.Block.GRASS_BLOCK);
             sand = catalog.state(BlockCatalog.Block.SAND);
@@ -202,7 +208,7 @@ public final class WorldExporter {
             }
             int depth = top - y;
             boolean submerged = top + 1 < water[i];
-            return switch (terrain[i]) {
+            BlockStateEntry block = switch (terrain[i]) {
                 case GRASS -> depth == 0 ? (submerged ? dirt : grass) : depth <= SUBSURFACE_DEPTH ? dirt : stone;
                 case DIRT -> depth <= SUBSURFACE_DEPTH ? dirt : stone;
                 case STONE -> stone;
@@ -210,6 +216,16 @@ public final class WorldExporter {
                 case GRAVEL -> depth <= SUBSURFACE_DEPTH ? gravel : stone;
                 case SNOW -> depth == 0 ? snow : depth <= SUBSURFACE_DEPTH ? dirt : stone;
             };
+            return block == stone && deepslateAt(x, y, z) ? deepslate : block;
+        }
+
+        boolean deepslateAt(int x, int y, int z) {
+            if (y < DEEPSLATE_TOP) {
+                return true;
+            }
+            int above = y - DEEPSLATE_TOP;
+            return above < DEEPSLATE_BLEND
+                    && GenHash.unit(GenHash.hash(seed, GenHash.DEEPSLATE, x, y, z)) * DEEPSLATE_BLEND < DEEPSLATE_BLEND - above;
         }
     }
 }

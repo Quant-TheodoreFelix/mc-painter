@@ -6,8 +6,11 @@ import java.util.Optional;
 public final class DataVersions {
 
     public static final int V1_18 = 2860;
+    public static final int V1_18_2 = 2975;
     public static final int V1_19 = 3105;
     public static final int V1_20 = 3463;
+    public static final int V1_20_2 = 3578;
+    public static final int V1_20_3 = 3698;
     public static final int V1_21_4 = 4189;
     public static final int V26_1_SNAPSHOT_6 = 4774;
     public static final int V26_2 = 4903;

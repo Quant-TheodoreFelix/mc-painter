@@ -3,6 +3,7 @@ package space.qu4nt.thirdparty.mcpainter.io;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -31,6 +32,7 @@ import space.qu4nt.thirdparty.mcpainter.nbt.StringTag;
 import space.qu4nt.thirdparty.mcpainter.nbt.Tag;
 import space.qu4nt.thirdparty.mcpainter.nbt.TagType;
 import space.qu4nt.thirdparty.mcpainter.world.Edit;
+import space.qu4nt.thirdparty.mcpainter.world.GenerationSettings;
 import space.qu4nt.thirdparty.mcpainter.world.TerrainType;
 import space.qu4nt.thirdparty.mcpainter.world.TilePos;
 import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
@@ -100,6 +102,10 @@ class WorldExporterTest {
             assertEquals("minecraft:sand", blockAt(origin, 21, 67, 3));
             assertEquals("minecraft:stone", blockAt(origin, 21, 66, 3));
             assertEquals("minecraft:bedrock", blockAt(origin, 21, -64, 3));
+            assertEquals("minecraft:deepslate", blockAt(origin, 21, -63, 3));
+            assertEquals("minecraft:deepslate", blockAt(origin, 21, -1, 3));
+            assertEquals("minecraft:deepslate", blockAt(origin, 21, 0, 3));
+            assertEquals("minecraft:stone", blockAt(origin, 21, 8, 3));
             assertEquals("minecraft:air", blockAt(origin, 22, 71, 3));
 
             CompoundTag heightmaps = region.readChunk(1, 0).orElseThrow().tag()
@@ -115,6 +121,49 @@ class WorldExporterTest {
             assertEquals("minecraft:desert", ground.biomes().orElseThrow().get(ChunkSection.biomeIndex(2, 0, 2)).toString());
             assertEquals("minecraft:plains", ground.biomes().orElseThrow().get(ChunkSection.biomeIndex(0, 0, 0)).toString());
         }
+    }
+
+    @Test
+    void deepslateBlendsIntoStoneDeterministically() throws IOException {
+        writeTemplate();
+        WorldModel model = WorldModel.builder(-64, 320, 63).generation(new GenerationSettings(5)).build();
+        try (Edit edit = model.beginEdit("setup")) {
+            edit.addTile(new TilePos(0, 0), 70, TerrainType.STONE);
+        }
+        WorldExporter.export(model, world);
+        int[] counts = new int[WorldExporter.DEEPSLATE_BLEND];
+        StringBuilder first = new StringBuilder();
+        try (RegionFile region = RegionFile.open(world.resolve("region/r.0.0.mca"))) {
+            ChunkData chunk = ChunkData.parse(region.readChunk(3, 3).orElseThrow());
+            for (int y = 0; y < WorldExporter.DEEPSLATE_BLEND; y++) {
+                for (int z = 48; z < 64; z++) {
+                    for (int x = 48; x < 64; x++) {
+                        boolean deep = blockAt(chunk, x, y, z).equals("minecraft:deepslate");
+                        counts[y] += deep ? 1 : 0;
+                        first.append(deep ? '1' : '0');
+                    }
+                }
+            }
+        }
+        assertEquals(256, counts[0]);
+        for (int y = 1; y < WorldExporter.DEEPSLATE_BLEND; y++) {
+            double expected = 256.0 * (WorldExporter.DEEPSLATE_BLEND - y) / WorldExporter.DEEPSLATE_BLEND;
+            assertTrue(Math.abs(counts[y] - expected) < 40, "y " + y + " count " + counts[y]);
+            assertTrue(counts[y] <= counts[y - 1] + 30, "y " + y);
+        }
+        WorldExporter.export(model, world);
+        StringBuilder second = new StringBuilder();
+        try (RegionFile region = RegionFile.open(world.resolve("region/r.0.0.mca"))) {
+            ChunkData chunk = ChunkData.parse(region.readChunk(3, 3).orElseThrow());
+            for (int y = 0; y < WorldExporter.DEEPSLATE_BLEND; y++) {
+                for (int z = 48; z < 64; z++) {
+                    for (int x = 48; x < 64; x++) {
+                        second.append(blockAt(chunk, x, y, z).equals("minecraft:deepslate") ? '1' : '0');
+                    }
+                }
+            }
+        }
+        assertEquals(first.toString(), second.toString());
     }
 
     @Test
