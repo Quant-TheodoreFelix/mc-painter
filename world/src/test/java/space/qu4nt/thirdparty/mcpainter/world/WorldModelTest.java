@@ -299,4 +299,87 @@ class WorldModelTest {
         assertEquals("minecraft:plains", copy.biome(5, 5));
         assertEquals(0, copy.revision());
     }
+
+    private static WorldModel flatArea() {
+        WorldModel.Builder builder = WorldModel.builder(-64, 320, 62).bounds(new TileRect(-5, -5, 5, 5))
+                .base(BaseTerrain.flat(64.5f, TerrainType.GRASS)).editable(new TileRect(0, 0, 0, 0))
+                .generation(new GenerationSettings(7, true));
+        for (int z = -1; z <= 1; z++) {
+            for (int x = -1; x <= 1; x++) {
+                builder.baseTile(new TilePos(x, z));
+            }
+        }
+        return builder.build();
+    }
+
+    @Test
+    void flatBaseTilesAreSharedUntilEdited() {
+        WorldModel model = flatArea();
+        assertEquals(9, model.tileCount());
+        assertTrue(model.isBaseTile(new TilePos(0, 0)));
+        assertEquals(Layer.INITIAL_ORE_VALUE, model.layer(5, 5, Layer.COAL_ORE));
+        try (Edit edit = model.beginEdit("paint")) {
+            assertTrue(edit.setHeight(5, 5, 90));
+            assertFalse(edit.setHeight(-5, 5, 90));
+            assertFalse(edit.setHeight(130, 5, 90));
+        }
+        assertEquals(90f, model.height(5, 5));
+        assertEquals(64.5f, model.height(6, 5));
+        assertEquals(64.5f, model.height(-5, 5));
+        assertEquals(64.5f, model.height(130, 5));
+        assertFalse(model.isBaseTile(new TilePos(0, 0)));
+        assertTrue(model.isBaseTile(new TilePos(1, 0)));
+        assertEquals(java.util.Set.of(new TilePos(0, 0)), model.dirtyTiles());
+
+        model.markClean(model.dirtyTiles());
+        assertTrue(model.dirtyTiles().isEmpty());
+        assertTrue(model.undo());
+        assertEquals(64.5f, model.height(5, 5));
+        assertTrue(model.isBaseTile(new TilePos(0, 0)));
+        assertEquals(java.util.Set.of(new TilePos(0, 0)), model.dirtyTiles());
+        assertTrue(model.redo());
+        assertEquals(90f, model.height(5, 5));
+        assertEquals(64.5f, model.height(10, 10));
+    }
+
+    @Test
+    void resettingAFlatTileRestoresTheBaseAndVoidTilesAreRemoved() {
+        WorldModel model = flatArea();
+        try (Edit edit = model.beginEdit("paint")) {
+            edit.setTerrain(3, 3, TerrainType.SAND);
+        }
+        try (Edit edit = model.beginEdit("reset")) {
+            assertTrue(edit.resetTile(new TilePos(0, 0)));
+            assertFalse(edit.resetTile(new TilePos(0, 0)));
+            assertFalse(edit.resetTile(new TilePos(1, 0)));
+            assertFalse(edit.addTile(new TilePos(2, 2), 70, TerrainType.SAND));
+        }
+        assertEquals(TerrainType.GRASS, model.terrain(3, 3));
+        assertTrue(model.isBaseTile(new TilePos(0, 0)));
+        assertTrue(model.undo());
+        assertEquals(TerrainType.SAND, model.terrain(3, 3));
+
+        WorldModel empty = WorldModel.builder(-64, 320, 62).editable(new TileRect(0, 0, 1, 0)).build();
+        try (Edit edit = empty.beginEdit("add")) {
+            assertTrue(edit.addTile(new TilePos(1, 0), 70, TerrainType.SAND));
+            assertFalse(edit.addTile(new TilePos(2, 0), 70, TerrainType.SAND));
+        }
+        try (Edit edit = empty.beginEdit("reset")) {
+            assertTrue(edit.resetTile(new TilePos(1, 0)));
+        }
+        assertEquals(0, empty.tileCount());
+        assertTrue(empty.isBaseTile(new TilePos(1, 0)));
+    }
+
+    @Test
+    void tilesMustLieInsideTheBounds() {
+        WorldModel.Builder builder = WorldModel.builder(-64, 320, 62).bounds(new TileRect(0, 0, 0, 0))
+                .base(BaseTerrain.flat(64, TerrainType.GRASS));
+        builder.baseTile(new TilePos(1, 0));
+        assertThrows(IllegalArgumentException.class, builder::build);
+        assertThrows(IllegalStateException.class,
+                () -> WorldModel.builder(-64, 320, 62).baseTile(new TilePos(0, 0)));
+        assertThrows(IllegalArgumentException.class, () -> WorldModel.builder(-64, 320, 62)
+                .base(BaseTerrain.flat(400, TerrainType.GRASS)).build());
+    }
 }

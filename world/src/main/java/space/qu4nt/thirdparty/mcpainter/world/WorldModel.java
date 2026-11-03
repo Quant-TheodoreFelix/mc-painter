@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,11 +28,16 @@ public final class WorldModel {
     private final List<String> biomes;
     private final Map<TilePos, Tile> tiles;
     private final EditHistory history = new EditHistory();
+    private final TileRect bounds;
+    private final BaseTerrain base;
+    private final TileRect editable;
+    private final Set<TilePos> dirty = new HashSet<>();
     private GenerationSettings generation;
+    private Tile baseTile;
     private Edit activeEdit;
 
     private WorldModel(int minY, int maxY, int seaLevel, int maxTiles, List<String> biomes, Map<TilePos, Tile> tiles,
-            GenerationSettings generation) {
+            GenerationSettings generation, TileRect bounds, BaseTerrain base, TileRect editable) {
         this.minY = minY;
         this.maxY = maxY;
         this.seaLevel = seaLevel;
@@ -39,6 +45,9 @@ public final class WorldModel {
         this.biomes = biomes;
         this.tiles = tiles;
         this.generation = generation;
+        this.bounds = bounds;
+        this.base = base;
+        this.editable = editable;
     }
 
     public static WorldModel create(int minY, int maxY, int seaLevel) {
@@ -67,6 +76,38 @@ public final class WorldModel {
 
     public GenerationSettings generation() {
         return generation;
+    }
+
+    public TileRect bounds() {
+        return bounds;
+    }
+
+    public BaseTerrain base() {
+        return base;
+    }
+
+    public TileRect editable() {
+        return editable;
+    }
+
+    public boolean isEditable(TilePos pos) {
+        return editable.contains(pos) && bounds.contains(pos);
+    }
+
+    public Set<TilePos> dirtyTiles() {
+        return Set.copyOf(dirty);
+    }
+
+    public void markClean(Collection<TilePos> positions) {
+        dirty.removeAll(positions);
+    }
+
+    public boolean isBaseTile(TilePos pos) {
+        Tile tile = tiles.get(Objects.requireNonNull(pos, "pos"));
+        if (tile == null) {
+            return !base.filled();
+        }
+        return base.filled() && (tile.shared() || tile.sameContent(baseTile()));
     }
 
     public List<String> biomes() {
@@ -126,7 +167,8 @@ public final class WorldModel {
                 copies.put(pos, tile.copy());
             }
         }
-        return new WorldModel(minY, maxY, seaLevel, maxTiles, new ArrayList<>(biomes), copies, generation);
+        return new WorldModel(minY, maxY, seaLevel, maxTiles, new ArrayList<>(biomes), copies, generation, bounds,
+                base, editable);
     }
 
     public boolean contains(int x, int z) {
@@ -221,6 +263,30 @@ public final class WorldModel {
 
     void assignGeneration(GenerationSettings value) {
         generation = Objects.requireNonNull(value, "generation");
+        baseTile = null;
+    }
+
+    Tile baseTile() {
+        if (baseTile == null) {
+            baseTile = createBase(minY, maxY, seaLevel, base, generation);
+        }
+        return baseTile;
+    }
+
+    void markDirty(Collection<TilePos> positions) {
+        dirty.addAll(positions);
+    }
+
+    static Tile createBase(int minY, int maxY, int seaLevel, BaseTerrain base, GenerationSettings generation) {
+        Tile tile = Tile.filled(Math.clamp(base.height(), minY, maxY), base.terrain(), seaLevel, 0);
+        if (generation.initialOres()) {
+            for (Layer layer : Layer.values()) {
+                if (layer.ore()) {
+                    tile.fillLayer(layer, Layer.INITIAL_ORE_VALUE);
+                }
+            }
+        }
+        return tile.asShared();
     }
 
     void finishEdit(Edit edit, EditHistory.Step step) {
@@ -230,6 +296,7 @@ public final class WorldModel {
         activeEdit = null;
         if (step != null) {
             history.push(step);
+            dirty.addAll(step.before().keySet());
         }
     }
 
@@ -271,6 +338,10 @@ public final class WorldModel {
         private final List<String> biomes = new ArrayList<>(List.of(DEFAULT_BIOME));
         private final Map<TilePos, Tile> tiles = new HashMap<>();
         private GenerationSettings generation = GenerationSettings.DEFAULT;
+        private TileRect bounds = TileRect.WORLD;
+        private BaseTerrain base = BaseTerrain.VOID;
+        private TileRect editable = TileRect.WORLD;
+        private Tile sharedBase;
 
         private Builder(int minY, int maxY, int seaLevel) {
             if (minY >= maxY || minY % 16 != 0 || maxY % 16 != 0) {
@@ -294,6 +365,41 @@ public final class WorldModel {
 
         public Builder generation(GenerationSettings value) {
             generation = Objects.requireNonNull(value, "generation");
+            sharedBase = null;
+            return this;
+        }
+
+        public Builder bounds(TileRect value) {
+            bounds = Objects.requireNonNull(value, "bounds");
+            return this;
+        }
+
+        public Builder base(BaseTerrain value) {
+            base = Objects.requireNonNull(value, "base");
+            sharedBase = null;
+            return this;
+        }
+
+        public Builder editable(TileRect value) {
+            editable = Objects.requireNonNull(value, "editable");
+            return this;
+        }
+
+        public Builder baseTile(TilePos pos) {
+            Objects.requireNonNull(pos, "pos");
+            if (!base.filled()) {
+                throw new IllegalStateException("void base has no base tile");
+            }
+            if (tiles.containsKey(pos)) {
+                throw new IllegalArgumentException("duplicate tile " + pos);
+            }
+            if (tiles.size() >= maxTiles) {
+                throw new IllegalArgumentException("tile limit " + maxTiles + " exceeded");
+            }
+            if (sharedBase == null) {
+                sharedBase = createBase(minY, maxY, seaLevel, base, generation);
+            }
+            tiles.put(pos, sharedBase);
             return this;
         }
 
@@ -358,11 +464,23 @@ public final class WorldModel {
             if (tile == null) {
                 throw new IllegalArgumentException("no tile " + pos);
             }
+            if (tile.shared()) {
+                throw new IllegalArgumentException("base tile " + pos + " is shared");
+            }
             return tile;
         }
 
         public WorldModel build() {
+            if (base.filled() && !(base.height() >= minY && base.height() <= maxY)) {
+                throw new IllegalArgumentException("base height out of range");
+            }
             for (Map.Entry<TilePos, Tile> entry : tiles.entrySet()) {
+                if (!bounds.contains(entry.getKey())) {
+                    throw new IllegalArgumentException("tile " + entry.getKey() + " outside bounds");
+                }
+                if (entry.getValue().shared()) {
+                    continue;
+                }
                 for (int i = 0; i < Tile.AREA; i++) {
                     if (entry.getValue().biomeIndex(i) >= biomes.size()) {
                         throw new IllegalArgumentException("biome index out of range in tile " + entry.getKey());
@@ -370,7 +488,7 @@ public final class WorldModel {
                 }
             }
             return new WorldModel(minY, maxY, seaLevel, maxTiles, new ArrayList<>(biomes), new HashMap<>(tiles),
-                    generation);
+                    generation, bounds, base, editable);
         }
     }
 }

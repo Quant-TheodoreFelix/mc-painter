@@ -172,7 +172,7 @@ final class BrushStroke {
     private boolean removeTiles(int x, int z) {
         boolean removed = false;
         for (TilePos pos : touchedTiles(brush, x, z)) {
-            removed |= edit.removeTile(pos);
+            removed |= edit.resetTile(pos);
         }
         return removed;
     }

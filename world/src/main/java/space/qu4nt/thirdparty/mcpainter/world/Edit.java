@@ -30,7 +30,7 @@ public final class Edit implements AutoCloseable {
     public boolean addTile(TilePos pos, float height, TerrainType terrain) {
         requireOpen();
         Map<TilePos, Tile> tiles = model.tilesForEdit();
-        if (tiles.containsKey(pos)) {
+        if (tiles.containsKey(pos) || !model.isEditable(pos)) {
             return false;
         }
         if (tiles.size() >= model.maxTiles()) {
@@ -63,6 +63,9 @@ public final class Edit implements AutoCloseable {
     public boolean removeTile(TilePos pos) {
         requireOpen();
         Objects.requireNonNull(pos, "pos");
+        if (!model.isEditable(pos)) {
+            return false;
+        }
         Map<TilePos, Tile> tiles = model.tilesForEdit();
         Tile tile = tiles.remove(pos);
         if (tile == null) {
@@ -71,6 +74,28 @@ public final class Edit implements AutoCloseable {
         if (!before.containsKey(pos)) {
             before.put(pos, tile);
         }
+        return true;
+    }
+
+    public boolean resetTile(TilePos pos) {
+        requireOpen();
+        Objects.requireNonNull(pos, "pos");
+        if (!model.base().filled()) {
+            return removeTile(pos);
+        }
+        if (!model.isEditable(pos)) {
+            return false;
+        }
+        Map<TilePos, Tile> tiles = model.tilesForEdit();
+        Tile tile = tiles.get(pos);
+        Tile base = model.baseTile();
+        if (tile != null && (tile.shared() || tile.sameContent(base))) {
+            return false;
+        }
+        if (!before.containsKey(pos)) {
+            before.put(pos, tile);
+        }
+        tiles.put(pos, base);
         return true;
     }
 
@@ -137,9 +162,21 @@ public final class Edit implements AutoCloseable {
 
     private Tile writable(TilePos pos) {
         requireOpen();
-        Tile tile = model.tilesForEdit().get(pos);
+        if (!model.isEditable(pos)) {
+            return null;
+        }
+        Map<TilePos, Tile> tiles = model.tilesForEdit();
+        Tile tile = tiles.get(pos);
         if (tile == null) {
             return null;
+        }
+        if (tile.shared()) {
+            if (!before.containsKey(pos)) {
+                before.put(pos, tile);
+            }
+            Tile own = tile.copy();
+            tiles.put(pos, own);
+            return own;
         }
         if (!before.containsKey(pos)) {
             before.put(pos, tile.copy());

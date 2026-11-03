@@ -8,7 +8,7 @@ public final class Tile {
     public static final int SHIFT = 7;
     public static final int SIZE = 1 << SHIFT;
     public static final int AREA = SIZE * SIZE;
-    static final long ESTIMATED_BYTES = (long) AREA * (Float.BYTES + Byte.BYTES + Short.BYTES + Short.BYTES);
+    public static final long ESTIMATED_BYTES = (long) AREA * (Float.BYTES + Byte.BYTES + Short.BYTES + Short.BYTES);
 
     private final float[] heights;
     private final byte[] terrain;
@@ -16,14 +16,21 @@ public final class Tile {
     private final short[] biomes;
     private final byte[][] layers;
     private final int[] layerFill;
+    private final boolean shared;
 
-    private Tile(float[] heights, byte[] terrain, short[] water, short[] biomes, byte[][] layers, int[] layerFill) {
+    private Tile(float[] heights, byte[] terrain, short[] water, short[] biomes, byte[][] layers, int[] layerFill,
+            boolean shared) {
         this.heights = heights;
         this.terrain = terrain;
         this.water = water;
         this.biomes = biomes;
         this.layers = layers;
         this.layerFill = layerFill;
+        this.shared = shared;
+    }
+
+    private Tile(float[] heights, byte[] terrain, short[] water, short[] biomes, byte[][] layers, int[] layerFill) {
+        this(heights, terrain, water, biomes, layers, layerFill, false);
     }
 
     private Tile(float[] heights, byte[] terrain, short[] water, short[] biomes) {
@@ -62,6 +69,20 @@ public final class Tile {
         return (localZ << SHIFT) | localX;
     }
 
+    Tile asShared() {
+        return new Tile(heights, terrain, water, biomes, layers, layerFill, true);
+    }
+
+    public boolean shared() {
+        return shared;
+    }
+
+    private void requireMutable() {
+        if (shared) {
+            throw new IllegalStateException("shared base tiles are read only");
+        }
+    }
+
     Tile copy() {
         byte[][] layerCopy = new byte[layers.length][];
         for (int i = 0; i < layers.length; i++) {
@@ -71,6 +92,9 @@ public final class Tile {
     }
 
     long estimatedBytes() {
+        if (shared) {
+            return 0;
+        }
         long bytes = ESTIMATED_BYTES;
         for (byte[] values : layers) {
             bytes += values == null ? 0 : AREA;
@@ -118,6 +142,7 @@ public final class Tile {
     }
 
     void setLayer(Layer layer, int index, int value) {
+        requireMutable();
         int ordinal = layer.ordinal();
         byte[] values = layers[ordinal];
         if (values == null) {
@@ -132,11 +157,13 @@ public final class Tile {
     }
 
     void fillLayer(Layer layer, int value) {
+        requireMutable();
         layers[layer.ordinal()] = null;
         layerFill[layer.ordinal()] = value;
     }
 
     void loadLayer(Layer layer, byte[] values) {
+        requireMutable();
         requireLength(values.length, layer.id());
         layers[layer.ordinal()] = values.clone();
     }
@@ -174,14 +201,17 @@ public final class Tile {
     }
 
     void setHeight(int index, float value) {
+        requireMutable();
         heights[index] = value;
     }
 
     void setTerrain(int index, TerrainType type) {
+        requireMutable();
         terrain[index] = (byte) type.ordinal();
     }
 
     void setWaterLevel(int index, int level) {
+        requireMutable();
         water[index] = (short) level;
     }
 
@@ -197,6 +227,7 @@ public final class Tile {
     }
 
     void setBiome(int index, int biomeIndex) {
+        requireMutable();
         biomes[index] = (short) biomeIndex;
     }
 

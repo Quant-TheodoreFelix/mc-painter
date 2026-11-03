@@ -90,6 +90,7 @@ final class EditHistory {
                 tiles.put(entry.getKey(), entry.getValue());
             }
         }
+        model.markDirty(step.before().keySet());
         GenerationSettings generation = null;
         if (step.generation() != null) {
             generation = model.generation();
