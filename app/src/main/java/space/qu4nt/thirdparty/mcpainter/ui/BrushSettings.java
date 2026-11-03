@@ -11,7 +11,7 @@ import space.qu4nt.thirdparty.mcpainter.world.WorldModel;
 
 final class BrushSettings {
 
-    static final int MAX_RADIUS = 256;
+    static final int MAX_RADIUS = 512;
     static final int DEFAULT_RADIUS = 12;
     static final int MIN_STRENGTH_PERCENT = 1;
     static final int DEFAULT_STRENGTH_PERCENT = 50;

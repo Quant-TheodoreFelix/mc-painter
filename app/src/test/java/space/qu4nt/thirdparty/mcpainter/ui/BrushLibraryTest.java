@@ -88,7 +88,7 @@ class BrushLibraryTest {
             {"\"name\": \"산 만들기\"", "\"name\": \"<html>\""},
             {"\"name\": \"산 만들기\"", "\"name\": \"a\\u0000\""},
             {"\"tool\": \"flatten\"", "\"tool\": \"explode\""},
-            {"\"radius\": 24", "\"radius\": 257"},
+            {"\"radius\": 24", "\"radius\": 513"},
             {"\"radius\": 24", "\"radius\": -1"},
             {"\"radius\": 24", "\"radius\": \"24\""},
             {"\"strength\": 40", "\"strength\": 0"},
