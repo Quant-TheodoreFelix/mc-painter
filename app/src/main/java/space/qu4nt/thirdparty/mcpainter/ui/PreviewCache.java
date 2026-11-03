@@ -40,7 +40,7 @@ final class PreviewCache {
     private final Executor edt;
     private final Renderer renderer;
     private final Consumer<TilePos> ready;
-    private final int maxInFlight;
+    private int maxInFlight;
     private final int maxEntries;
     private final LinkedHashMap<TilePos, SurfacePreview.Surface> surfaces = new LinkedHashMap<>(256, 0.75f, true);
     private final Map<TilePos, Long> versions = new HashMap<>();
@@ -66,7 +66,13 @@ final class PreviewCache {
     }
 
     static ExecutorService workerPool() {
-        int threads = Math.clamp(Runtime.getRuntime().availableProcessors() - 1, 1, 4);
+        return workerPool(Math.clamp(Runtime.getRuntime().availableProcessors() - 1, 1, 4));
+    }
+
+    static ExecutorService workerPool(int threads) {
+        if (threads < 1) {
+            throw new IllegalArgumentException("threads must be positive");
+        }
         AtomicInteger count = new AtomicInteger();
         ThreadFactory factory = task -> {
             Thread thread = new Thread(task, "mc-painter-preview-" + count.incrementAndGet());
@@ -75,6 +81,27 @@ final class PreviewCache {
             return thread;
         };
         return new ThreadPoolExecutor(threads, threads, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), factory);
+    }
+
+    static void resize(ExecutorService pool, int threads) {
+        if (threads < 1 || !(pool instanceof ThreadPoolExecutor executor)) {
+            return;
+        }
+        if (threads > executor.getMaximumPoolSize()) {
+            executor.setMaximumPoolSize(threads);
+            executor.setCorePoolSize(threads);
+        } else {
+            executor.setCorePoolSize(threads);
+            executor.setMaximumPoolSize(threads);
+        }
+    }
+
+    void setMaxInFlight(int value) {
+        if (value < 1) {
+            throw new IllegalArgumentException("maxInFlight must be positive");
+        }
+        maxInFlight = value;
+        pump();
     }
 
     static int threads(ExecutorService pool) {

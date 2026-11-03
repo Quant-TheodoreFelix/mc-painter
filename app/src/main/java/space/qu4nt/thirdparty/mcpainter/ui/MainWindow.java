@@ -42,6 +42,7 @@ final class MainWindow {
     private final JMenuItem redoItem;
     private final boolean nativeQuit;
     private final int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+    private final Performance.Environment environment = Performance.Environment.current();
     private JCheckBoxMenuItem gridItem;
     private GridDialog gridDialog;
 
@@ -78,6 +79,7 @@ final class MainWindow {
         });
         map.setGridOpacity(settings.chunkGridOpacity(), settings.tileGridOpacity());
         map.setPreview(settings.preview());
+        map.setThreads(settings.threads(environment));
         this.project = new ProjectActions(frame, messages, document, map);
         this.undoItem = item("menu.edit.undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, menuMask), this::undo);
         this.redoItem = item("menu.edit.redo",
@@ -173,6 +175,7 @@ final class MainWindow {
         edit.add(redoItem);
         edit.addSeparator();
         edit.add(item("menu.edit.seed", null, this::editSeed));
+        edit.add(item("menu.edit.performance", null, this::performanceSettings));
         if (!nativeQuit) {
             redoItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Y, menuMask));
         }
@@ -302,6 +305,24 @@ final class MainWindow {
         } catch (BackingStoreException | RuntimeException e) {
             status.notice(messages.text("error.settings"));
         }
+    }
+
+    private void performanceSettings() {
+        PerformanceForm form = new PerformanceForm(messages, environment, settings.areaMemoryMiB(environment),
+                settings.threads(environment));
+        if (!Dialogs.form(frame, messages, "performance.title", form.panel())) {
+            return;
+        }
+        try {
+            if (form.areaMiB() == environment.recommendedAreaMiB() && form.threads() == environment.recommendedThreads()) {
+                settings.resetPerformance();
+            } else {
+                settings.setPerformance(form.areaMiB(), form.threads());
+            }
+        } catch (BackingStoreException | RuntimeException e) {
+            Dialogs.error(frame, messages, "error.settings", e);
+        }
+        map.setThreads(settings.threads(environment));
     }
 
     private void gridSettings() {

@@ -72,6 +72,7 @@ final class MapView {
     private final Viewport viewport = new Viewport();
     private final TileImageCache cache = new TileImageCache(TileImageCache.DEFAULT_MAX_BYTES);
     private final PreviewCache previews;
+    private final ExecutorService previewPool;
     private boolean preview;
     private final JComponent canvas;
     private final Timer repeat;
@@ -109,6 +110,7 @@ final class MapView {
         canvas.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
         repeat = new Timer(REPEAT_MILLIS, e -> repeatStroke());
         ExecutorService pool = PreviewCache.workerPool();
+        previewPool = pool;
         previews = new PreviewCache(document::model, pool, SwingUtilities::invokeLater, SurfacePreview::render,
                 pos -> {
                     cache.invalidate(List.of(pos));
@@ -224,6 +226,11 @@ final class MapView {
 
     boolean preview() {
         return preview;
+    }
+
+    void setThreads(int threads) {
+        PreviewCache.resize(previewPool, threads);
+        previews.setMaxInFlight(2 * Math.max(1, threads));
     }
 
     void setPreview(boolean value) {

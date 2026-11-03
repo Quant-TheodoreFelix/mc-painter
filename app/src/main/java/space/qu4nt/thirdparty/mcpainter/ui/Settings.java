@@ -11,6 +11,8 @@ final class Settings {
     static final String CHUNK_GRID = "chunkGridOpacity";
     static final String TILE_GRID = "tileGridOpacity";
     static final String PREVIEW = "gamePreview";
+    static final String AREA_MEMORY = "areaMemoryMiB";
+    static final String THREADS = "workerThreads";
     static final int DEFAULT_CHUNK_GRID = 16;
     static final int DEFAULT_TILE_GRID = 43;
 
@@ -55,6 +57,46 @@ final class Settings {
     void setPreview(boolean value) throws BackingStoreException {
         preferences.put(PREVIEW, Boolean.toString(value));
         preferences.flush();
+    }
+
+    int areaMemoryMiB(Performance.Environment environment) {
+        return bounded(AREA_MEMORY, Performance.MIN_AREA_MIB, environment.maxAreaMiB(),
+                environment.recommendedAreaMiB());
+    }
+
+    int threads(Performance.Environment environment) {
+        return bounded(THREADS, 1, environment.maxThreads(), environment.recommendedThreads());
+    }
+
+    boolean customPerformance() {
+        return read(AREA_MEMORY) != null || read(THREADS) != null;
+    }
+
+    void setPerformance(int areaMiB, int threads) throws BackingStoreException {
+        if (areaMiB < Performance.MIN_AREA_MIB || threads < 1) {
+            throw new IllegalArgumentException("performance settings out of range");
+        }
+        preferences.putInt(AREA_MEMORY, areaMiB);
+        preferences.putInt(THREADS, threads);
+        preferences.flush();
+    }
+
+    void resetPerformance() throws BackingStoreException {
+        preferences.remove(AREA_MEMORY);
+        preferences.remove(THREADS);
+        preferences.flush();
+    }
+
+    private int bounded(String key, int min, int max, int fallback) {
+        String text = read(key);
+        if (text == null || text.length() > 9) {
+            return fallback;
+        }
+        try {
+            return Math.clamp(Integer.parseInt(text), min, Math.max(min, max));
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     private String read(String key) {

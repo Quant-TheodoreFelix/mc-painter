@@ -18,6 +18,7 @@ public final class WorldModel {
     public static final int DEFAULT_MAX_TILES = 2048;
     public static final int MAX_BIOMES = 0xFFFF;
     public static final String DEFAULT_BIOME = "minecraft:plains";
+    public static final long UNDO_BYTES = EditHistory.MAX_BYTES;
 
     private static final Pattern BIOME_ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_.-]+(/[a-z0-9_.-]+)*");
 
